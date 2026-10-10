@@ -1,0 +1,2 @@
+posted_at,direction,amount,counterparty,transaction_id,account_id,currency
+2026-10-09T14:22:00+05:00,CREDIT,3500.00,Ali,TXN123456,wallet-main,PKR

@@ -1,0 +1,18 @@
+import argparse, threading
+from .config import Settings
+from .database import Database
+from .jobs import worker_loop, run_once, cleanup
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true", help="Process one queued job and exit")
+    parser.add_argument("--cleanup", action="store_true", help="Purge expired records and exit")
+    args = parser.parse_args()
+    settings = Settings(); settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    database = Database(settings.database_url)
+    if args.cleanup: cleanup(database, settings)
+    elif args.once: print("Processed one job" if run_once(database, settings) else "No queued jobs")
+    else:
+        stop = threading.Event()
+        try: worker_loop(database, settings, stop)
+        except KeyboardInterrupt: stop.set()

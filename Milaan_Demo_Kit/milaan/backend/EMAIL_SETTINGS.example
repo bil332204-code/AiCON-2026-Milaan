@@ -1,0 +1,7 @@
+REQUIRE_EMAIL_VERIFICATION=true
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls
+SMTP_USER=youraddress@gmail.com
+SMTP_FROM=youraddress@gmail.com
+SMTP_PASSWORD=your_google_app_password

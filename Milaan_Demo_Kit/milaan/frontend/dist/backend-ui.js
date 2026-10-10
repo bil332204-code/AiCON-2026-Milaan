@@ -1,0 +1,192 @@
+import {MilaanAPI} from './milaan-api.js';
+import {mapRemote} from './remote-state.js';
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=s=>document.querySelector(s);
+export function validateBackendURL(value, pageProtocol=location.protocol) {
+  const url=new URL(value);
+  if(url.username||url.password||url.search||url.hash)throw Error('Use the backend origin only, without credentials, query or fragment.');
+  if(!['http:','https:'].includes(url.protocol))throw Error('Use an HTTP or HTTPS backend address.');
+  if(url.pathname!=='/')throw Error('Use the backend origin, without an API path.');
+  if(pageProtocol==='https:'&&url.protocol!=='https:')throw Error('This online page needs an HTTPS backend. For your laptop, use the downloaded website at http://localhost:8080.');
+  return url.origin;
+}
+export function createBackend(hooks) {
+  const {getState,setState,render,showWorkspace,dispose,toast,ask}=hooks;
+  let base='';try{base=localStorage.getItem('milaan-backend-origin')||'';}catch{}
+  if(!base)base=location.port==='8080'?'http://127.0.0.1:8000':location.origin;
+  const api=new MilaanAPI(base);let profile=null,contentValues=null,integrationStatus=null,working=false,pending='batches';
+  const cache=new Map();
+  const authDialog=document.createElement('dialog');authDialog.id='account-dialog';authDialog.className='help-dialog account-dialog';
+  authDialog.innerHTML=`<button class="dialog-close icon-button" type="button" data-account-close aria-label="Close">×</button><div class="eyebrow dark-label">YOUR SAVED WORKSPACE</div><h2>Welcome to Milaan.</h2><p class="account-intro">Sign in to save orders, receipts and review decisions on your connected backend.</p><form id="account-form"><label class="field">Backend address<input id="backend-origin" type="url" required placeholder="https://your-backend.example.com" value="${esc(base)}"></label><label class="field">Email<input id="account-email" type="email" autocomplete="username" required></label><label class="field">Password<input id="account-password" type="password" autocomplete="current-password" required minlength="1"></label><label class="field" id="name-field" hidden>Your name<input id="account-name" autocomplete="name" maxlength="100"></label><div id="verification-fields" hidden><p id="verification-message" role="status"></p><label class="field">6-digit email code<input id="account-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6"></label><button class="link-button" id="resend-code" type="button">Resend code</button></div><div id="account-error" class="validation-error" role="alert" hidden></div><button class="btn btn-forest" id="account-submit" type="submit">Sign in</button><button class="link-button" id="account-switch" type="button">Create a new account</button></form><p class="account-note">On your laptop, use http://127.0.0.1:8000. On this online website, connect a deployed HTTPS backend. Session tokens stay in memory; sign in again after a page refresh.</p>`;
+  document.body.append(authDialog);let registering=false,challenge=null,resendAt=0;
+  $('[data-account-close]').onclick=()=>authDialog.close();
+  function showAuthMode() {
+    $('#verification-fields').hidden=!challenge;
+    for(const id of ['account-email','account-password','account-name','backend-origin']){
+      $('#'+id).closest('label').hidden=!!challenge||(id==='account-name'&&!registering);
+      $('#'+id).disabled=!!challenge;
+    }
+    $('#account-code').required=!!challenge;
+    $('#account-name').required=registering&&!challenge;
+    $('#account-password').minLength=registering?10:1;
+    $('#account-submit').textContent=challenge?'Verify email & continue':registering?'Send verification code':'Sign in';
+    $('#account-switch').textContent=challenge?'Use a different email / back':registering?'I already have an account':'Create a new account';
+    if(challenge){$('#verification-message').textContent=`We sent a code to ${challenge.email}. It expires in 10 minutes. Check spam too.`;$('#account-code').focus();}
+  }
+  function authError(error){$('#account-error').hidden=false;$('#account-error').textContent=error.message==='Failed to fetch'?'Could not connect. Check the server address, that the backend is running, and its CORS_ORIGINS.':error.message;}
+  $('#account-switch').onclick=()=>{if(challenge){challenge=null;$('#account-code').value='';}else registering=!registering;$('#account-error').hidden=true;showAuthMode();};
+  $('#resend-code').onclick=async()=>{
+    const button=$('#resend-code');button.disabled=true;$('#account-error').hidden=true;
+    try{if(Date.now()<resendAt)throw Error(`Wait ${Math.ceil((resendAt-Date.now())/1000)} seconds before resending.`);
+      challenge=await api.resendCode(challenge.challenge_id);resendAt=Date.now()+60000;$('#account-code').value='';showAuthMode();
+    }catch(error){authError(error);}finally{button.disabled=false;}
+  };
+  $('#account-form').onsubmit=async e=>{
+    e.preventDefault();const button=$('#account-submit');button.disabled=true;$('#account-switch').disabled=true;$('#resend-code').disabled=true;$('#account-error').hidden=true;
+    try{
+      const origin=validateBackendURL($('#backend-origin').value.trim());api.baseUrl=origin;
+      const info=challenge?await api.verifyEmail(challenge.challenge_id,$('#account-code').value.trim()):registering?await api.register($('#account-email').value,$('#account-password').value,$('#account-name').value):await api.login($('#account-email').value,$('#account-password').value);
+      if(info.verification_required){challenge=info;resendAt=Date.now()+60000;$('#account-password').value='';showAuthMode();return;}
+      challenge=null;$('#account-code').value='';profile=info.user;$('#account-password').value='';showAuthMode();try{localStorage.setItem('milaan-backend-origin',origin);}catch{}
+      [contentValues,integrationStatus]=await Promise.all([api.content(),api.integrations()]);
+      authDialog.close();applyContent();toast(`Signed in as ${profile.display_name}`);
+      if(pending==='new')await newBatch();else if(pending==='sample')await serverDemo();else showWorkspace('batches');
+    }catch(error){authError(error);}
+    finally{button.disabled=false;$('#account-switch').disabled=false;$('#resend-code').disabled=false;}
+  };
+  function authenticate(action='batches'){pending=action;if(!authDialog.open)authDialog.showModal();}
+  function applyContent(){
+    const name=contentValues?.branding?.value?.product_name;
+    if(name){document.title=String(name)+' · Payment clarity';const el=$('.workspace-tag');if(el)el.textContent=String(name)+' · SELLER WORKSPACE';}
+    let faqs=$('#workspace-faq');if(!faqs){faqs=document.createElement('section');faqs.id='workspace-faq';$('#help-dialog').append(faqs);}
+    const items=contentValues?.faq?.value?.items;faqs.innerHTML=Array.isArray(items)?items.map(item=>`<details class="saved-faq"><summary>${esc(item.question)}</summary><p>${esc(item.answer)}</p></details>`).join(''):'';
+  }
+  async function guarded(fn){if(working)throw Error('Wait for the current server operation.');working=true;try{return await fn();}finally{working=false;}}
+  async function load(id,view=getState().view){
+    const [batch,orders,claims,statements,results,events]=await Promise.all([api.batch(id),api.orders(id),api.claims(id),api.statements(id),api.results(id),api.audit(id)]);
+    const allLines=[];
+    for(const statement of statements.items){for(let offset=0;;offset+=500){const page=await api.statementLines(statement.id,offset);allLines.push(...page.items);if(page.items.length<500)break;}}
+    if(getState().remote?.id!==id){dispose();cache.clear();}
+    const mapped=mapRemote(batch,orders.items,claims.items,statements.items,allLines,results.items,events.items);
+    mapped.claims.forEach(c=>c.url=cache.get(c.id)||null);
+    setState({...getState(),...mapped,view,filter:'all',query:'',error:''});render();return batch;
+  }
+  async function newBatch(){
+    if(!api.token)return authenticate('new');
+    return guarded(async()=>{const name=prompt('Name this batch','My dispatch batch');if(!name?.trim())return;const b=await api.createBatch(name.trim());await load(b.id,'imports');showWorkspace('imports');});
+  }
+  async function serverDemo(){
+    if(!api.token)return authenticate('sample');
+    return guarded(async()=>{const b=await api.demo();const j=await api.reconcile(b.id);toast('Creating your saved sample batch…');await api.waitForJob(j.id);await load(b.id,'results');showWorkspace('results');});
+  }
+  async function batches(){
+    if(!api.token){$('#app-content').innerHTML='<div class="results-panel empty-state"><h2>Sign in to open saved records.</h2><button class="btn btn-forest" data-action="account">Sign in</button></div>';return authenticate();}
+    $('#app-content').innerHTML='<div class="page-intro"><h1>Your saved batches.</h1></div><p role="status">Loading your records…</p>';
+    try{const data=await api.batches();if(getState().view!=='batches'||!api.token)return;
+      $('#app-content').innerHTML=`<div class="page-intro"><div><div class="eyebrow">YOUR CONNECTED BACKEND</div><h1>Your work, saved.</h1><p>Open a batch to continue. Inputs and review decisions stay on the server until expiry.</p></div><div class="intro-actions"><button class="btn btn-outline" data-action="server-sample">Saved sample</button><button class="btn btn-forest" data-action="new">New batch</button></div></div><div class="saved-batches">${data.items.length?data.items.map(b=>`<button class="saved-batch" data-batch-id="${esc(b.id)}"><span class="eyebrow">${b.is_demo?'SYNTHETIC SAMPLE':'YOUR RECORDS'}</span><h2>${esc(b.name)}</h2><p>Created ${new Date(b.created_at).toLocaleString()}<br>Expires ${new Date(b.expires_at).toLocaleString()}</p><strong>${b.latest_run_id?'Open results':'Continue imports'} →</strong></button>`).join(''):'<section class="import-card"><h2>A fresh start.</h2><p>Create a batch to upload your orders and statement, or try a saved sample.</p></section>'}</div>`;
+    }catch(error){$('#app-content').textContent=error.message;}
+  }
+  async function settings(){
+    if(!api.token)return authenticate();
+    try{[contentValues,integrationStatus]=await Promise.all([api.content(),api.integrations()]);if(getState().view!=='settings'||!api.token)return;
+      const fields={branding:{product_name:'Product name',tagline:'Tagline',hero_title:'Workspace welcome'},workspace:{shop_name:'Shop name'},messages:{matched:'Message after a match',review:'Message when more proof is needed'}};
+      const panels=Object.entries(fields).map(([key,names])=>`<section class="import-card settings-card"><h2>${esc(key)}</h2>${Object.entries(names).map(([field,label])=>`<label class="field">${esc(label)}<textarea data-content-group="${key}" data-content-field="${field}" rows="${key==='messages'?4:2}">${esc(contentValues[key].value[field]||'')}</textarea></label>`).join('')}<button class="btn btn-forest" data-content-save="${key}">Save ${key}</button></section>`).join('');
+      const faqItems=Array.isArray(contentValues.faq.value.items)?contentValues.faq.value.items:[];
+      const faqPanel=`<section class="import-card settings-card"><h2>Frequently asked questions</h2>${[...faqItems, {question:'',answer:''}].map((item,i)=>`<div class="faq-edit"><label class="field">Question ${i+1}<input data-faq-question="${i}" value="${esc(item.question)}"></label><label class="field">Answer<textarea data-faq-answer="${i}" rows="3">${esc(item.answer)}</textarea></label></div>`).join('')}<p>Fill the empty pair to add a question. Clear both fields to remove one.</p><button class="btn btn-forest" data-content-save="faq">Save questions</button></section>`;
+      $('#app-content').innerHTML=`<div class="page-intro"><div><div class="eyebrow">WORKSPACE SETTINGS</div><h1>Make it yours.</h1><p>Saved content is private to your seller account.</p></div></div><section class="import-card connection-info"><h2>${esc(profile.display_name)}</h2><p>${esc(api.baseUrl)}<br>Image reader: ${integrationStatus.gemini_configured&&integrationStatus.extraction_provider==='gemini'?'Gemini configured':'Manual entry · configure Gemini in the backend .env for AI reading'}<br>New batch retention: ${integrationStatus.retention_hours} hours. No live bank connection.</p><button class="btn btn-outline" data-action="logout">Sign out</button></section><div class="import-grid">${panels}${faqPanel}</div>`;
+    }catch(error){toast(error.message);}
+  }
+  async function ensureEditable(){
+    const state=getState();if(!state.remote)throw Error('Open a saved batch first.');
+    if(state.remote.latest_run_id){if(!await ask('Edit this batch?','This releases its current credit allocations and clears current results. Previous decisions remain in the batch audit history.','Reset and edit'))return false;
+      const reason=prompt('Why are you changing the source records?','Updating source records');if(!reason||reason.trim().length<5)return false;
+      await api.reset(state.remote.id,state.remote.revision,reason);await load(state.remote.id,state.view);
+    }return true;
+  }
+  async function upload(kind,files){return guarded(async()=>{
+    if(getState().claims.some(c=>c.dirty))throw Error('Save edited receipt fields before uploading more records.');
+    const draft={coverage:{...getState().coverage},references:getState().referenceVerified,account:$('#statement-account')?.value?.trim(),orderId:$('#upload-order')?.value};
+    if(!await ensureEditable())return;
+    let state=getState(),batch=state.remote;
+    if(kind==='orders'){if(state.orders.length)throw Error('Orders already exist. Create another batch to replace the order CSV.');await api.uploadOrders(batch.id,files[0],batch.revision);}
+    else if(kind==='statement'){
+      const account=draft.account;
+      if(!account||!draft.coverage.start||!draft.coverage.end)throw Error('Set receiving account and actual statement period before uploading.');
+      if(state.statements.some(s=>s.account_id===account))throw Error('A statement for this account already exists. Remove it before importing a replacement.');
+      await api.uploadStatement(batch.id,files[0],batch.revision,{account_id:account,coverage_start:draft.coverage.start,coverage_end:draft.coverage.end,complete:draft.coverage.complete,references_verified:draft.references,provider_pair:'seller-declared-profile'});
+    }else{
+      const order=state.orders.find(o=>o.serverId===draft.orderId);if(!order)throw Error('Choose the order these screenshots belong to first.');
+      if(state.claims.length+files.length>100)throw Error('Use at most 100 screenshots per batch.');
+      for(const file of files){const uploaded=await api.uploadClaim(batch.id,order.serverId,file,batch.revision);batch=uploaded.batch;toast(`Uploaded ${file.name}`);}
+    }
+    await load(batch.id,'imports');toast('Saved to your backend.');
+  });}
+  async function run(){return guarded(async()=>{
+    if(getState().claims.some(c=>c.dirty))throw Error('Save your edited receipt fields before reconciling.');
+    if(!await ensureEditable())return;const state=getState();
+    if(state.claims.some(c=>c.dirty))throw Error('Save your edited receipt fields before reconciling.');
+    const job=await api.reconcile(state.remote.id);toast('Reconciliation queued…');
+    await api.waitForJob(job.id,{onProgress:j=>toast(`Reconciliation: ${j.status} · ${j.progress}/${j.total}`)});
+    await load(state.remote.id,'results');showWorkspace('results');
+  });}
+  async function read(ids){return guarded(async()=>{
+    if(getState().claims.some(c=>c.dirty))throw Error('Save edited receipt fields before requesting another AI read.');
+    const state=getState();if(state.mode==='demo')throw Error('Saved synthetic samples have no uploaded images.');
+    if(!integrationStatus?.gemini_configured||integrationStatus.extraction_provider!=='gemini')throw Error('Configure EXTRACTION_PROVIDER, GEMINI_API_KEY and GEMINI_MODEL in the backend .env, then restart and reopen Settings. Manual entry works now.');
+    if(!await ask('Read receipts with Gemini?','Pending receipt images will be sent to Google for two AI reads. Review the extracted fields before relying on them.','Send pending images'))return;
+    if(!await ensureEditable())return;
+    for(const id of ids){const c=getState().claims.find(c=>c.id===id);if(c&&c.extractionStatus!=='pending')await api.retryExtraction(c.id,c.version);}
+    const job=await api.extract(state.remote.id,true);await api.waitForJob(job.id,{onProgress:j=>toast(`Reading: ${j.status} · ${j.progress}/${j.total}`)});
+    await load(state.remote.id,'imports');toast('Reads saved. Check each receipt, including any disagreements.');
+  });}
+  async function saveClaim(id){return guarded(async()=>{
+    const draft={...getState().claims.find(c=>c.id===id)};if(!draft.id)throw Error('Receipt missing.');
+    if(!await ensureEditable())return;
+    const current=getState().claims.find(c=>c.id===id);
+    await api.updateClaim(id,current.version,{...draft.fields,is_payment_receipt:draft.fields.is_payment_receipt!==false,amount_pkr:draft.amount?(draft.amount/100).toFixed(2):null,datetime_local:draft.at||null,transaction_id:draft.ref||null,sender_name:draft.name||null,unreadable_fields:draft.confirmed?[]:draft.fields.unreadable_fields||[]},draft.confirmed);
+    await load(getState().remote.id,'imports');toast('Receipt fields saved.');
+  });}
+  async function decision(row,status,line,reason){return guarded(async()=>{await api.decide(row.matchId,row.version,status,reason,line||null);await load(getState().remote.id,'results');toast('Review decision saved.');});}
+  async function image(claim){if(!claim?.hasImage)return null;if(cache.has(claim.id))return cache.get(claim.id);const url=URL.createObjectURL(await api.receiptBlob(claim.id));cache.set(claim.id,url);claim.url=url;return url;}
+  function hydrate(){
+    const bid=getState().remote?.id;
+    document.querySelectorAll('.proof-thumbnail[data-server-image]').forEach(el=>{const claim=getState().claims.find(c=>c.id===el.dataset.serverImage);image(claim).then(url=>{if(url&&el.isConnected&&getState().remote?.id===bid)el.src=url;}).catch(()=>{el.alt='Preview unavailable; reload after signing in.';});});
+  }
+  async function exportResults(){const blob=await api.exportCSV(getState().remote.id);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='milaan-reconciliation.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function edit(el){const c=getState().claims.find(c=>c.id===el.dataset.claim);if(!c)return;const field=el.dataset.claimField;
+    if(['order','account'].includes(field))throw Error('Order/account links are fixed after upload. Remove and upload again against the correct order.');
+    if(field==='amount'){const text=el.value.trim();if(text&&!/^\d+(?:\.\d{1,2})?$/.test(text))throw Error('Use a positive decimal PKR amount.');c.amount=text?Math.round(Number(text)*100):null;}
+    else if(field==='confirmed'){if(el.checked&&(!c.amount||!c.at))throw Error('Enter a positive amount and full timestamp before confirming.');c.confirmed=el.checked;}
+    else c[field]=el.value;
+    if(field!=='confirmed')c.confirmed=false;c.dirty=true;
+    const check=document.querySelector(`[data-claim="${c.id}"][data-claim-field="confirmed"]`);if(check)check.checked=c.confirmed;
+    toast('Edited locally. Press Save receipt fields to persist.');
+  }
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('button');if(!button)return;
+    if(!button.dataset.batchId&&!button.dataset.contentSave&&!button.dataset.saveClaim&&!button.dataset.removeStatement&&!['account','logout','server-sample','saved-batches','settings','refresh-batch','edit-inputs'].includes(button.dataset.action))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    try{
+      if(button.dataset.batchId)await guarded(async()=>{const b=await load(button.dataset.batchId,'results');showWorkspace(b.latest_run_id?'results':'imports');});
+      else if(button.dataset.contentSave){const key=button.dataset.contentSave;const value={...contentValues[key].value};
+        if(key==='faq'){value.items=[...document.querySelectorAll('[data-faq-question]')].map(el=>({question:el.value.trim(),answer:document.querySelector(`[data-faq-answer="${el.dataset.faqQuestion}"]`).value.trim()})).filter(item=>item.question||item.answer);if(value.items.some(item=>!item.question||!item.answer))throw Error('Each question needs an answer.');}
+        else document.querySelectorAll(`[data-content-group="${key}"]`).forEach(el=>value[el.dataset.contentField]=el.value.trim());
+        const updated=await api.saveContent(key,value,contentValues[key].version);contentValues[key]=updated;applyContent();toast('Content saved.');}
+      else if(button.dataset.saveClaim)await saveClaim(button.dataset.saveClaim);
+      else if(button.dataset.removeStatement)await guarded(async()=>{if(!await ensureEditable())return;const b=getState().remote;await api.deleteStatement(button.dataset.removeStatement,b.revision);await load(b.id,'imports');});
+      else if(button.dataset.action==='logout'){if(working)throw Error('Wait for the current operation.');await api.logout();dispose();cache.clear();profile=null;contentValues=null;$('#review-dialog').close();$('#review-content').replaceChildren();$('#workspace-faq')?.replaceChildren();document.title='Milaan · Payment clarity';setState({...getState(),remote:null,orders:[],claims:[],lines:[],results:[],activity:[],view:'batches'});authenticate();render();}
+      else if(button.dataset.action==='account')authenticate();
+      else if(button.dataset.action==='server-sample')await serverDemo();
+      else if(button.dataset.action==='saved-batches'){if(api.token)showWorkspace('batches');else authenticate();}
+      else if(button.dataset.action==='settings'){if(api.token)showWorkspace('settings');else authenticate();}
+      else if(button.dataset.action==='refresh-batch')await guarded(()=>load(getState().remote.id));
+      else if(button.dataset.action==='edit-inputs')await guarded(ensureEditable);
+    }catch(error){toast(error.message);if(error.status===401)authenticate();}
+  },true);
+  return {api,newBatch,run,read,upload,saveClaim,decision,image,hydrate,exportResults,edit,batches,settings,load,
+    open(){if(api.token)showWorkspace('batches');else authenticate();},
+    profile:()=>profile,content:()=>contentValues,busy:()=>working,
+    async remove(id){return guarded(async()=>{if(!await ensureEditable())return;const c=getState().claims.find(c=>c.id===id);await api.deleteClaim(id,c.version);const url=cache.get(id);if(url)URL.revokeObjectURL(url);cache.delete(id);await load(getState().remote.id,'imports');});},
+    async clear(){return guarded(async()=>{if(!await ask('Delete this saved batch?','This permanently removes its receipts, records, results and allocations. Export first if needed.','Delete batch'))return;await api.deleteBatch(getState().remote.id);dispose();cache.clear();setState({...getState(),remote:null,orders:[],claims:[],lines:[],results:[],activity:[],view:'batches'});showWorkspace('batches');});}
+  };
+}

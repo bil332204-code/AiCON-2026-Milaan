@@ -1,0 +1,11 @@
+order_ref,customer_name,amount_due,account_id
+ORD-001,Tariq Mahmood,2500.00,demo-store-main
+ORD-002,Mohammad Bilal Hussain,4200.00,demo-store-main
+ORD-003,Zubair Siddiqui,1850.00,demo-store-main
+ORD-004,Muhammad Ali,3100.00,demo-store-main
+ORD-005,Usman Ghani,5000.00,demo-store-main
+ORD-006,Hamza Riaz,3500.00,demo-store-main
+ORD-007,Kamran Akmal,2100.00,demo-store-main
+ORD-008,Fatima Noor,6000.00,demo-store-main
+ORD-009,Saad Sheikh,2500.00,demo-store-main
+ORD-010,Ayesha Khan,1200.00,demo-store-main

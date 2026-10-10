@@ -1,0 +1,11 @@
+{
+  "is_payment_receipt": true,
+  "provider_app": "SYNTHETIC SAMPLE",
+  "amount_pkr": "3500.00",
+  "datetime_local": "2026-10-09T14:22:00+05:00",
+  "transaction_id": "TXN123456",
+  "sender_name": "Ali",
+  "receiver_hint": "Sample seller / wallet-main",
+  "status_text": "Successful",
+  "unreadable_fields": []
+}

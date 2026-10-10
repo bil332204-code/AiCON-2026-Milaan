@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Milaan · Backend integration console</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#e8eeeb;background:#101917;color-scheme:dark}*{box-sizing:border-box}body{max-width:1100px;margin:48px auto;padding:0 22px}h1{font-size:42px;letter-spacing:-2px}p{color:#b7c8bf;line-height:1.7}section{padding:24px;border:1px solid #32493d;border-radius:18px;margin:20px 0;background:#17231d}label{display:block;font-size:13px;margin:10px 0;color:#bdd5c5}input{padding:12px;width:100%;background:#111d16;border:1px solid #45644e;border-radius:8px;color:white}button{padding:12px 18px;margin:8px 8px 0 0;border:0;border-radius:8px;background:#c4e9ac;color:#163125;cursor:pointer;font-weight:600}button:disabled{opacity:.45;cursor:wait}.fields{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}#status{white-space:pre-wrap;min-height:24px}table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;padding:14px 8px;border-bottom:1px solid #33473c}.table{overflow-x:auto}.ship{color:#b1f28b}.hold{color:#ffb4a5}.review{color:#f6d789}#summary{font-size:20px;font-weight:600}a{color:#c4e9ac}@media(max-width:700px){.fields{grid-template-columns:1fr}body{margin-top:24px}h1{font-size:32px}}
+</style></head><body>
+<p>MILAAN / DEVELOPER WORKSPACE</p><h1>A real API. A saved workflow.</h1>
+<p>Use this console to check your running backend before connecting the cinematic website. The sample batch contains synthetic data and uses no external AI service.</p>
+<section><label>Backend URL<input id="base" value="http://127.0.0.1:8000"></label>
+<div class="fields"><label>Name<input id="name" autocomplete="name" value="Milaan teammate"></label><label>Email<input id="email" type="email" autocomplete="username" placeholder="you@example.com"></label><label>Password (at least 10 characters)<input id="password" type="password" autocomplete="current-password"></label></div>
+<button id="register">Create account</button><button id="login">Sign in</button><button id="logout" disabled>Sign out</button></section>
+<section><button id="demo" disabled>Create + reconcile sample</button><button id="load" disabled>Load saved batches</button><button id="download" disabled>Download CSV</button><p id="status" role="status" aria-live="polite">Start the backend, then create an account or sign in.</p><div id="batches"></div></section>
+<section><p id="summary">Results will appear here.</p><div class="table"><table><thead><tr><th>Order</th><th>Customer</th><th>PKR</th><th>Status</th><th>Reason</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<p>Manual receipt upload, review decisions, content editing, and all other endpoints are available in <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noopener">API docs</a>. Integration instructions: <code>docs/FRONTEND.md</code>.</p>
+<script type="module">
+import {MilaanAPI} from './milaan-api.js';
+const $ = id => document.getElementById(id); let api, activeBatch = null;
+const status = message => $('status').textContent = message;
+function sessionUI(signedIn) { ['demo','load','logout'].forEach(id => $(id).disabled = !signedIn); $('download').disabled = !signedIn || !activeBatch; }
+async function action(fn) { try { await fn(); } catch(error) { status(error.message); if(error.status === 401) sessionUI(false); } }
+function newClient() { api = new MilaanAPI($('base').value.trim()); }
+async function showBatch(id) {
+  const response = await api.results(id); activeBatch = id; sessionUI(true);
+  $('summary').textContent = `${response.summary.orders} orders · ${response.summary.ship} Ship · ${response.summary.hold} Hold · ${response.summary.review} Review`;
+  $('rows').replaceChildren();
+  for(const r of response.items) {
+    const tr = document.createElement('tr');
+    [r.order.order_ref, r.order.customer_name, (r.order.amount_due_paisa / 100).toFixed(2), r.final_status.toUpperCase(), r.reason].forEach((value,i) => { const td=document.createElement('td'); td.textContent=value; if(i===3)td.className=r.final_status; tr.append(td); });
+    $('rows').append(tr);
+  }
+  status(`${response.batch.name}${response.batch.is_demo ? ' · SAMPLE DATA' : ''} · saved on the server`);
+}
+for(const type of ['register','login']) $(type).onclick = () => action(async () => {
+  newClient(); let info = type === 'register' ? await api.register($('email').value,$('password').value,$('name').value) : await api.login($('email').value,$('password').value);
+  if(info.verification_required){const code=prompt('Enter the 6-digit code sent to your email');if(!code)return;info=await api.verifyEmail(info.challenge_id,code.trim());}
+  $('password').value=''; activeBatch=null; $('rows').replaceChildren(); $('batches').replaceChildren(); sessionUI(true); status(`Signed in as ${info.user.display_name}`);
+});
+$('demo').onclick = () => action(async () => { $('demo').disabled=true; try { status('Creating sample batch…'); const b=await api.demo(); const job=await api.reconcile(b.id); await api.waitForJob(job.id,{onProgress:j=>status(`Reconciliation: ${j.status} (${j.progress}/${j.total})`)}); await showBatch(b.id); } finally { $('demo').disabled=!api.token; } });
+$('load').onclick = () => action(async () => { const data=await api.batches(); $('batches').replaceChildren(); for(const b of data.items){const button=document.createElement('button');button.textContent=b.name;button.onclick=()=>action(()=>showBatch(b.id));$('batches').append(button);}status(`${data.items.length} saved batches`); });
+$('logout').onclick = () => action(async () => {await api.logout();activeBatch=null;sessionUI(false);$('rows').replaceChildren();$('batches').replaceChildren();$('summary').textContent='Signed out.';status('Session revoked.');});
+$('download').onclick=()=>action(async()=>{const blob=await api.exportCSV(activeBatch);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='milaan-results.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+</script></body></html>
