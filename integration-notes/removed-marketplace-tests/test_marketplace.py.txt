@@ -1,0 +1,451 @@
+import pytest
+from sqlalchemy import select
+from app.models import User, Product, MarketplaceOrder
+from tests.conftest import register
+
+
+def get_admin_headers(client, database, email="admin@milaan.com"):
+    headers = register(client, email=email)
+    with database.sessions() as db:
+        user = db.scalar(select(User).where(User.email == email))
+        user.is_admin = True
+        db.commit()
+    return headers
+
+
+def test_admin_product_crud_and_validation(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+
+    # 1. Create product successfully
+    payload = {
+        "name": "Lawn Embroidered Kurti",
+        "description": "Premium summer lawn with intricate embroidery",
+        "sku": "LWN-001",
+        "category": "Apparel",
+        "purchase_price": "2200.00",
+        "selling_price": "3500.00",
+        "stock_quantity": 25,
+        "low_stock_threshold": 5,
+        "is_active": True,
+        "image_url": "https://example.com/kurti.jpg",
+    }
+    res = client.post("/api/admin/products", headers=admin_headers, json=payload)
+    assert res.status_code == 200, res.text
+    prod = res.json()
+    assert prod["sku"] == "LWN-001"
+    assert prod["selling_price_pkr"] == "3500.00"
+    assert prod["stock_quantity"] == 25
+    assert prod["is_low_stock"] is False
+    assert prod["is_out_of_stock"] is False
+    prod_id = prod["id"]
+
+    # 2. Prevent negative prices
+    bad_price = {**payload, "sku": "LWN-002", "selling_price": "-100.00"}
+    res = client.post("/api/admin/products", headers=admin_headers, json=bad_price)
+    assert res.status_code == 422
+
+    # 3. Prevent negative stock
+    bad_stock = {**payload, "sku": "LWN-002", "stock_quantity": -5}
+    res = client.post("/api/admin/products", headers=admin_headers, json=bad_stock)
+    assert res.status_code == 422
+
+    # 4. Prevent duplicate SKU
+    res = client.post("/api/admin/products", headers=admin_headers, json=payload)
+    assert res.status_code == 409
+
+    # 5. Get product detail
+    res = client.get(f"/api/admin/products/{prod_id}", headers=admin_headers)
+    assert res.status_code == 200
+    assert res.json()["name"] == "Lawn Embroidered Kurti"
+
+    # 6. Update product
+    update_res = client.put(
+        f"/api/admin/products/{prod_id}",
+        headers=admin_headers,
+        json={"selling_price": "3800.00", "stock_quantity": 3},
+    )
+    assert update_res.status_code == 200
+    updated = update_res.json()
+    assert updated["selling_price_pkr"] == "3800.00"
+    assert updated["stock_quantity"] == 3
+    assert updated["is_low_stock"] is True  # 3 <= 5
+
+    # 7. Update stock specifically
+    res = client.patch(
+        f"/api/admin/products/{prod_id}/stock",
+        headers=admin_headers,
+        json={"stock_quantity": 0},
+    )
+    assert res.status_code == 200
+    assert res.json()["is_out_of_stock"] is True
+
+    # 8. List products with filters
+    res = client.get("/api/admin/products?stock_filter=out_of_stock", headers=admin_headers)
+    assert res.status_code == 200
+    assert res.json()["total"] >= 1
+
+    # 9. Delete product
+    del_res = client.delete(f"/api/admin/products/{prod_id}", headers=admin_headers)
+    assert del_res.status_code == 200
+    assert del_res.json()["deleted"] is True
+
+    # Confirm deletion
+    res = client.get(f"/api/admin/products/{prod_id}", headers=admin_headers)
+    assert res.status_code == 404
+
+
+def test_seller_forbidden_from_admin_endpoints(env):
+    client, database, _ = env
+    seller_headers = register(client, email="regular_seller@example.com")
+
+    # Regular seller should get 403 on all admin routes
+    res = client.get("/api/admin/products", headers=seller_headers)
+    assert res.status_code == 403
+
+    res = client.post(
+        "/api/admin/products",
+        headers=seller_headers,
+        json={
+            "name": "Test",
+            "sku": "T-1",
+            "purchase_price": "100",
+            "selling_price": "200",
+            "stock_quantity": 5,
+        },
+    )
+    assert res.status_code == 403
+
+    res = client.get("/api/admin/marketplace-orders", headers=seller_headers)
+    assert res.status_code == 403
+
+
+def test_marketplace_visibility_and_filters(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_headers = register(client, email="buyer_seller@example.com")
+
+    # Admin creates 2 active products (apparel, footwear) and 1 inactive product
+    client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Chiffon Dupatta",
+            "sku": "CHF-01",
+            "category": "Apparel",
+            "purchase_price": "800.00",
+            "selling_price": "1400.00",
+            "stock_quantity": 10,
+            "is_active": True,
+        },
+    )
+    client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Leather Khussa",
+            "sku": "KHS-01",
+            "category": "Footwear",
+            "purchase_price": "1200.00",
+            "selling_price": "2200.00",
+            "stock_quantity": 15,
+            "is_active": True,
+        },
+    )
+    client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Hidden Discontinued Ring",
+            "sku": "RNG-01",
+            "category": "Jewelry",
+            "purchase_price": "500.00",
+            "selling_price": "900.00",
+            "stock_quantity": 5,
+            "is_active": False,
+        },
+    )
+
+    # Seller queries marketplace
+    res = client.get("/api/marketplace/products", headers=seller_headers)
+    assert res.status_code == 200
+    items = res.json()["items"]
+    skus = [i["sku"] for i in items]
+    assert "CHF-01" in skus
+    assert "KHS-01" in skus
+    assert "RNG-01" not in skus  # Inactive must never be shown to seller
+
+    # Filter by category
+    res_cat = client.get("/api/marketplace/products?category=Footwear", headers=seller_headers)
+    assert res_cat.status_code == 200
+    assert len(res_cat.json()["items"]) == 1
+    assert res_cat.json()["items"][0]["sku"] == "KHS-01"
+
+    # Search by keyword
+    res_search = client.get("/api/marketplace/products?search=Dupatta", headers=seller_headers)
+    assert res_search.status_code == 200
+    assert len(res_search.json()["items"]) == 1
+    assert res_search.json()["items"][0]["sku"] == "CHF-01"
+
+    # Categories list
+    cats_res = client.get("/api/marketplace/categories", headers=seller_headers)
+    assert cats_res.status_code == 200
+    cats = cats_res.json()["categories"]
+    assert "Apparel" in cats
+    assert "Footwear" in cats
+    assert "Jewelry" not in cats  # Only active product categories
+
+
+def test_cart_and_checkout_workflow(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_headers = register(client, email="shopping_seller@example.com")
+
+    # 1. Admin creates product with 10 in stock, selling price 2500 PKR
+    p_res = client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Silk Kaftan",
+            "sku": "SLK-77",
+            "category": "Luxury",
+            "purchase_price": "1500.00",
+            "selling_price": "2500.00",
+            "stock_quantity": 10,
+            "is_active": True,
+        },
+    )
+    product_id = p_res.json()["id"]
+
+    # 2. Seller adds to cart
+    c_res = client.post(
+        "/api/cart/items",
+        headers=seller_headers,
+        json={"product_id": product_id, "quantity": 3},
+    )
+    assert c_res.status_code == 200
+    cart = c_res.json()
+    assert cart["item_count"] == 3
+    assert cart["subtotal_pkr"] == "7500.00"  # 3 * 2500 = 7500
+    cart_item_id = cart["items"][0]["id"]
+
+    # 3. Attempting to add more than available stock is rejected
+    excess_res = client.post(
+        "/api/cart/items",
+        headers=seller_headers,
+        json={"product_id": product_id, "quantity": 15},
+    )
+    assert excess_res.status_code == 400
+
+    # 4. Update cart item quantity
+    upd_cart = client.put(
+        f"/api/cart/items/{cart_item_id}",
+        headers=seller_headers,
+        json={"quantity": 4},
+    )
+    assert upd_cart.status_code == 200
+    assert upd_cart.json()["item_count"] == 4
+    assert upd_cart.json()["subtotal_pkr"] == "10000.00"
+
+    # 5. Test checkout
+    checkout_res = client.post(
+        "/api/marketplace/checkout",
+        headers=seller_headers,
+        json={
+            "customer_name": "Fatima Zahra",
+            "customer_email": "fatima@example.com",
+            "customer_phone": "+923001234567",
+            "shipping_address": "House 12, Street 4, F-7/2, Islamabad",
+            "notes": "Urgent delivery please",
+        },
+    )
+    assert checkout_res.status_code == 200, checkout_res.text
+    order = checkout_res.json()
+    assert order["status"] == "Pending"
+    assert order["total_pkr"] == "10000.00"
+    assert order["customer_name"] == "Fatima Zahra"
+    assert order["payment_mode"] == "test_checkout"
+    assert len(order["items"]) == 1
+    assert order["items"][0]["quantity"] == 4
+    order_id = order["id"]
+
+    # 6. Verify stock in database reduced from 10 to 6
+    p_check = client.get(f"/api/admin/products/{product_id}", headers=admin_headers)
+    assert p_check.json()["stock_quantity"] == 6
+
+    # 7. Cart should now be empty
+    cart_after = client.get("/api/cart", headers=seller_headers)
+    assert cart_after.json()["item_count"] == 0
+    assert cart_after.json()["subtotal_pkr"] == "0.00"
+
+    # 8. Seller order history
+    my_orders = client.get("/api/marketplace/my-orders", headers=seller_headers)
+    assert my_orders.status_code == 200
+    assert len(my_orders.json()["items"]) == 1
+    assert my_orders.json()["items"][0]["id"] == order_id
+
+
+def test_order_isolation_between_sellers(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_a = register(client, email="seller_a@example.com")
+    seller_b = register(client, email="seller_b@example.com")
+
+    # Create product
+    p_res = client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Velvet Shawl",
+            "sku": "VL-01",
+            "purchase_price": "2000.00",
+            "selling_price": "4000.00",
+            "stock_quantity": 5,
+        },
+    )
+    prod_id = p_res.json()["id"]
+
+    # Seller A orders
+    client.post("/api/cart/items", headers=seller_a, json={"product_id": prod_id, "quantity": 1})
+    order_a = client.post(
+        "/api/marketplace/checkout",
+        headers=seller_a,
+        json={"customer_name": "Client A", "customer_email": "a@test.com"},
+    ).json()
+
+    # Seller B attempts to view Seller A's order -> 404
+    res = client.get(f"/api/marketplace/my-orders/{order_a['id']}", headers=seller_b)
+    assert res.status_code == 404
+
+    # Seller B attempts to cancel Seller A's order -> 404
+    cancel_res = client.post(f"/api/marketplace/my-orders/{order_a['id']}/cancel", headers=seller_b)
+    assert cancel_res.status_code == 404
+
+
+def test_order_cancellation_restores_stock_idempotently(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_headers = register(client, email="canceller@example.com")
+
+    # Product with 8 units
+    p_res = client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Pashmina Stole",
+            "sku": "PSH-99",
+            "purchase_price": "1000.00",
+            "selling_price": "2000.00",
+            "stock_quantity": 8,
+        },
+    )
+    prod_id = p_res.json()["id"]
+
+    # Order 3 units
+    client.post("/api/cart/items", headers=seller_headers, json={"product_id": prod_id, "quantity": 3})
+    order = client.post(
+        "/api/marketplace/checkout",
+        headers=seller_headers,
+        json={"customer_name": "Zainab", "customer_email": "z@example.com"},
+    ).json()
+
+    # Stock is now 5
+    p_mid = client.get(f"/api/admin/products/{prod_id}", headers=admin_headers).json()
+    assert p_mid["stock_quantity"] == 5
+
+    # Seller cancels order
+    cancel_res = client.post(f"/api/marketplace/my-orders/{order['id']}/cancel", headers=seller_headers)
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "Cancelled"
+
+    # Stock is restored back to 8
+    p_restored = client.get(f"/api/admin/products/{prod_id}", headers=admin_headers).json()
+    assert p_restored["stock_quantity"] == 8
+
+    # Attempt to cancel again -> 400 rejected (prevent duplicate stock restoration)
+    second_cancel = client.post(f"/api/marketplace/my-orders/{order['id']}/cancel", headers=seller_headers)
+    assert second_cancel.status_code == 400
+
+    # Stock remains 8, NOT 11
+    p_final = client.get(f"/api/admin/products/{prod_id}", headers=admin_headers).json()
+    assert p_final["stock_quantity"] == 8
+
+
+def test_admin_order_management(env):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_headers = register(client, email="buyer2@example.com")
+
+    # Create product
+    p_res = client.post(
+        "/api/admin/products",
+        headers=admin_headers,
+        json={
+            "name": "Cotton Kurta",
+            "sku": "CTN-44",
+            "purchase_price": "800.00",
+            "selling_price": "1500.00",
+            "stock_quantity": 10,
+        },
+    )
+    prod_id = p_res.json()["id"]
+
+    # Place order
+    client.post("/api/cart/items", headers=seller_headers, json={"product_id": prod_id, "quantity": 2})
+    order = client.post(
+        "/api/marketplace/checkout",
+        headers=seller_headers,
+        json={"customer_name": "Bilal", "customer_email": "bilal@example.com"},
+    ).json()
+
+    # Admin lists orders
+    admin_orders = client.get("/api/admin/marketplace-orders", headers=admin_headers)
+    assert admin_orders.status_code == 200
+    assert admin_orders.json()["total"] >= 1
+
+    # Admin updates status to Confirmed, then Shipped
+    s_conf = client.patch(
+        f"/api/admin/marketplace-orders/{order['id']}/status",
+        headers=admin_headers,
+        json={"status": "Confirmed"},
+    )
+    assert s_conf.status_code == 200
+    assert s_conf.json()["status"] == "Confirmed"
+
+    s_ship = client.patch(
+        f"/api/admin/marketplace-orders/{order['id']}/status",
+        headers=admin_headers,
+        json={"status": "Shipped"},
+    )
+    assert s_ship.status_code == 200
+    assert s_ship.json()["status"] == "Shipped"
+
+
+def test_product_image_upload(env, jpeg):
+    client, database, _ = env
+    admin_headers = get_admin_headers(client, database)
+    seller_headers = register(client, email="buyer3@example.com")
+
+    # Regular seller cannot upload product image
+    unauth = client.post(
+        "/api/admin/products/upload-image",
+        headers=seller_headers,
+        files={"file": ("product.jpg", jpeg, "image/jpeg")},
+    )
+    assert unauth.status_code == 403
+
+    # Admin uploads image
+    res = client.post(
+        "/api/admin/products/upload-image",
+        headers=admin_headers,
+        files={"file": ("product.jpg", jpeg, "image/jpeg")},
+    )
+    assert res.status_code == 200
+    image_url = res.json()["image_url"]
+    assert image_url.startswith("/api/products/images/")
+
+    # Fetch uploaded image
+    img_res = client.get(image_url)
+    assert img_res.status_code == 200
+    assert img_res.headers["content-type"] == "image/jpeg"
+

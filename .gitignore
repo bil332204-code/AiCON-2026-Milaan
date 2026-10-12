@@ -1,29 +1,7 @@
-# Secrets / private credentials
-.env
-.env.*
-!.env.example
-!.env.sample
-*.pem
-*.key
-# Dependencies / local caches
 .venv/
-venv/
-node_modules/
+.env
 __pycache__/
-*.py[cod]
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
-# Private runtime data
+data/
 *.db
-*.db-*
-*.sqlite
-*.sqlite3
-Milaan_Demo_Kit/demo-store/data/
-Milaan_Demo_Kit/milaan/backend/data/
-data/uploads/
-# Operating system files
-.DS_Store
-Thumbs.db
-*.log
-.coverage
+*.pkl

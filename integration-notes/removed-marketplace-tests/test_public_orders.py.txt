@@ -1,0 +1,144 @@
+import io
+import pytest
+from PIL import Image
+from sqlalchemy import select
+from datetime import timedelta
+from app.models import User, Batch, Order, Claim, now
+from app.security import password_hash
+
+@pytest.fixture
+def store(env):
+    client, db, settings = env
+    # Bootstrap demo seller user and open batch for testing public orders
+    with db.sessions() as s:
+        user = s.scalar(select(User).where(User.email == settings.demo_seller_email))
+        if not user:
+            user = User(
+                email=settings.demo_seller_email,
+                password_hash=password_hash(settings.demo_seller_password),
+                display_name="Milaan Admin",
+            )
+            s.add(user)
+            s.flush()
+        batch = s.scalar(select(Batch).where(Batch.owner_id == user.id, Batch.latest_run_id == None))
+        if not batch:
+            batch = Batch(owner_id=user.id, name="Public Orders", expires_at=now() + timedelta(hours=settings.retention_hours))
+            s.add(batch)
+        s.commit()
+    return client, db, settings
+
+def test_public_create_order_success(store):
+    client, db, settings = store
+    r = client.post("/api/public/order", data={
+        "customer_name": "Hamza Ali",
+        "customer_phone": "03001234567",
+        "amount_pkr": "4500",
+    })
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert "order_id" in data
+    assert data["order_ref"].startswith("MLN-")
+    assert data["amount_pkr"] == "4500.00"
+
+    with db.sessions() as s:
+        order = s.get(Order, data["order_id"])
+        assert order is not None
+        assert order.customer_name == "Hamza Ali"
+        assert order.customer_phone == "03001234567"
+        assert order.amount_due_paisa == 450000
+
+def test_public_create_order_validation_error(store):
+    client, _, _ = store
+    r = client.post("/api/public/order", data={
+        "customer_name": "",
+        "customer_phone": "0300",
+        "amount_pkr": "not-a-number",
+    })
+    assert r.status_code == 422
+
+def test_public_upload_receipt_flow(store, jpeg):
+    client, db, settings = store
+    # 1. Place order
+    r = client.post("/api/public/order", data={
+        "customer_name": "Sara Khan",
+        "customer_phone": "03219876543",
+        "amount_pkr": "2500",
+    })
+    assert r.status_code == 201
+    order_id = r.json()["order_id"]
+
+    # 2. Upload receipt
+    r = client.post(
+        f"/api/public/order/{order_id}/receipt",
+        files={"file": ("receipt.jpg", jpeg, "image/jpeg")},
+    )
+    assert r.status_code == 201
+    assert "Receipt uploaded successfully" in r.json()["message"]
+
+    # 3. Duplicate upload should fail with 409
+    r = client.post(
+        f"/api/public/order/{order_id}/receipt",
+        files={"file": ("receipt.jpg", jpeg, "image/jpeg")},
+    )
+    assert r.status_code == 409
+
+    # 4. Check claim in database
+    with db.sessions() as s:
+        claim = s.scalar(select(Claim).where(Claim.order_id == order_id))
+        assert claim is not None
+        assert claim.extraction_status == "pending"
+
+def test_admin_pending_orders_requires_auth(store):
+    client, _, _ = store
+    r = client.get("/api/admin/pending-orders")
+    assert r.status_code == 401
+
+def test_admin_pending_orders_lists_placed_orders(store, jpeg):
+    client, db, settings = store
+    # Log in as demo seller
+    login_res = client.post("/api/auth/login", json={
+        "email": settings.demo_seller_email,
+        "password": settings.demo_seller_password,
+    })
+    assert login_res.status_code == 200, login_res.text
+    headers = {"Authorization": "Bearer " + login_res.json()["access_token"]}
+
+    # Place an order and upload receipt
+    r = client.post("/api/public/order", data={
+        "customer_name": "Bilal Ahmed",
+        "customer_phone": "03335555555",
+        "amount_pkr": "7200",
+    })
+    assert r.status_code == 201
+    order_id = r.json()["order_id"]
+    client.post(
+        f"/api/public/order/{order_id}/receipt",
+        files={"file": ("proof.jpg", jpeg, "image/jpeg")},
+    )
+
+    # Place another order without receipt
+    r = client.post("/api/public/order", data={
+        "customer_name": "Ayesha Tariq",
+        "customer_phone": "03451112233",
+        "amount_pkr": "1200",
+    })
+    assert r.status_code == 201
+
+    # Fetch pending orders as admin
+    res = client.get("/api/admin/pending-orders", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] >= 2
+
+    # Check items
+    names = [item["customer_name"] for item in data["items"]]
+    assert "Bilal Ahmed" in names
+    assert "Ayesha Tariq" in names
+
+    bilal_order = next(item for item in data["items"] if item["customer_name"] == "Bilal Ahmed")
+    assert bilal_order["has_receipt"] is True
+    assert bilal_order["receipt_url"] is not None
+
+    ayesha_order = next(item for item in data["items"] if item["customer_name"] == "Ayesha Tariq")
+    assert ayesha_order["has_receipt"] is False
+    assert ayesha_order["receipt_url"] is None
