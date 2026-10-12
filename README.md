@@ -8,13 +8,13 @@ Milaan is available for ongoing use with your own order and payment records. The
 
 1. Open the workspace and continue with ChatGPT. Read the [user guide and data privacy information](https://milaan-studio.bil332204.chatgpt.site/guide).
 2. Create a batch. Add orders directly or download the CSV templates for bulk imports.
-3. Upload orders and bank transactions; declare statement coverage accurately.
+3. Upload orders and bank transactions as CSV, or choose the PDF option (up to 5 MB / 200 records). PDF extraction requires your Gemini key and consent, then an explicit table review before saving. Declare statement coverage accurately.
 4. Attach a receipt to its order and confirm the visible amount, reference, timestamp, and payment status.
 5. Compare evidence, search results and inspect each recommendation. Export results CSV or download all batch records as JSON; original images download separately. Rename saved batches and update statement coverage as needed.
 
-Manual receipt confirmation works without an AI key. Optional Gemini extraction requires your own key and explicit consent; extracted fields still need review. The bank input is an uploaded CSV, not a direct bank connection. Results depend on the evidence supplied and do not independently prove that a bank transfer settled.
+Manual receipt confirmation works without an AI key. Optional Gemini extraction requires your own key and explicit consent; extracted fields still need review. Bank input is an uploaded CSV or reviewed PDF extraction, not a direct bank connection. PDF originals are not retained by the application; keep your source files. Incomplete extractions are rejected, and missing timestamps or references must be verified rather than invented. Results depend on the evidence supplied and do not independently prove that a bank transfer settled.
 
-The hosted application passed 20 matching/API tests, TypeScript checking, and a production build. Production deployment succeeded; full browser interaction and live Gemini calls have not been verified. The hosted application is maintained in its Sites Git source; this GitHub branch contains the separate local demo kit below.
+The hosted application passed 28 matching/API tests, TypeScript checking, and a production build. Production deployment succeeded; full browser interaction and live Gemini calls have not been verified. The hosted application is maintained in its Sites Git source; this GitHub branch contains the separate local demo kit below.
 
 ---
 
