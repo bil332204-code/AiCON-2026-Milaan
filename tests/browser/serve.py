@@ -18,10 +18,11 @@ with tempfile.TemporaryDirectory(prefix='milaan-browser-') as tmp:
            'GEMINI_API_KEY': '', 'REQUIRE_EMAIL_VERIFICATION': 'true',
            'DEMO_SELLER_EMAIL': 'browser@example.com',
            'DEMO_SELLER_PASSWORD': 'synthetic-browser-test-password',
-           'RUN_WORKER_IN_API': 'true'}
+           'RUN_WORKER_IN_API': 'true', 'APP_ENV':'development', 'SESSION_COOKIE_SECURE':'false', 'PUBLIC_ORIGIN':'http://127.0.0.1:8765', 'MILAAN_TEST_OUTBOX': '/tmp/milaan-browser-test-outbox.jsonl'}
     subprocess.run([sys.executable, '-m', 'alembic', 'upgrade', 'head'],
                    cwd=ROOT/'milaan/backend', env=env, check=True)
-    server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app',
+    Path(env['MILAAN_TEST_OUTBOX']).unlink(missing_ok=True)
+    server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'browser_server:app', '--app-dir', str(ROOT/'tests/browser'),
                               '--host', '127.0.0.1', '--port', '8765', '--log-level', 'warning'],
                              cwd=ROOT/'milaan/backend', env=env)
     try:
@@ -29,3 +30,4 @@ with tempfile.TemporaryDirectory(prefix='milaan-browser-') as tmp:
     finally:
         server.terminate()
         server.wait(timeout=10)
+        Path(env['MILAAN_TEST_OUTBOX']).unlink(missing_ok=True)
