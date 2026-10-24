@@ -60,3 +60,13 @@ SHIP/HOLD/REVIEW recommendations, private saved batches, manual review and CSV
 exports, with optional consent-based Gemini receipt extraction. A separate simulated
 store and synthetic integration suite demonstrate ambiguous evidence and duplicate
 payment handling. The externally hosted application is maintained separately.
+
+## V2 milestone A: reviewed imports and browser evidence
+
+The saved workspace now previews CSV records, supports manual source-column mapping,
+reports row errors and duplicate warnings, and requires explicit review before saving.
+Private audit metadata records source fingerprints and mapping choices. Discrepancy
+filters complement reference/customer/order search. Playwright exercises complete
+saved workflows on desktop and mobile against temporary synthetic data, including
+human decisions, CSV export and logout. [Actual results and genuine screenshots](V2_MILESTONE_A.md)
+show the scope; advanced multi-credit allocation remains a separate milestone.
