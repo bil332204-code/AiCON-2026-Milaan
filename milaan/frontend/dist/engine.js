@@ -17,7 +17,7 @@ export function timestamp(s){
 export const normRef=s=>String(s||'').trim().toUpperCase().replace(/\s/g,'');
 export const fullRef=s=>!!s&&!/[.*…•]|[xX]{2}|masked|last\s*\d/i.test(s)&&String(s).trim().length>=5;
 export function parseCSV(text){
-  if(text.length>2_000_000)throw Error('CSV must be smaller than 2 MB.');
+  if(new TextEncoder().encode(text).length>2_000_000)throw Error('CSV must be smaller than 2 MB.');
   text=text.replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quoted=false,closed=false;
   for(let i=0;i<text.length;i++){
     const ch=text[i];
@@ -52,6 +52,7 @@ export function importStatement(text){
     return {id:'s'+i,account:r.account_id,amount:paisa(r.amount),time,ref:r.transaction_id,name:r.counterparty||'Not supplied',direction,currency:'PKR'};
   });
 }
+export const successfulStatus = value => ['success','successful','completed','paid','payment successful','transaction successful'].includes(String(value??'').trim().toLowerCase());
 export function reconcile({orders,claims,lines,coverage,referenceVerified=false}){
   const refs=new Map(),digests=new Map();
   for(const c of claims){if(fullRef(c.ref)){const k=c.account+'|'+normRef(c.ref);refs.set(k,(refs.get(k)||0)+1);}if(c.digest)digests.set(c.digest,(digests.get(c.digest)||0)+1);}
@@ -69,6 +70,7 @@ export function reconcile({orders,claims,lines,coverage,referenceVerified=false}
     const close=credits.filter(l=>l.amount===amount&&Math.abs(l.time-time)<=10*60*1000);
     base.candidates=[...new Map([...exact,...close].map(l=>[l.id,l])).values()];
     if((fullRef(claim.ref)&&refs.get(claim.account+'|'+normRef(claim.ref))>1)||(claim.digest&&digests.get(claim.digest)>1))return finish('review','REUSED_PROOF','This reference or screenshot is also claimed by another order.');
+    if(!successfulStatus(claim.status_text))return finish('review','STATUS_CONFLICT','Payment status is missing, unrecognized, pending or unsuccessful. Check the receipt.');
     if(amount!==order.due)return finish('review','AMOUNT_CONFLICT','The screenshot amount does not equal the order total.');
     const start=timestamp(coverage.start),end=timestamp(coverage.end);
     if(!coverage.complete||!Number.isFinite(start)||!Number.isFinite(end)||end<=start||time<start||time>end)return finish('review','COVERAGE','The statement does not establish coverage for this claim.');
@@ -109,7 +111,7 @@ export function receiptHints(text){
 export function demoData(){
   const specs=[['1042','Hira Khan',3500,'MLN778810', '14:22'],['1043','Sana Malik',4200,'','16:05'],['1044','Usman Tariq',2800,'MLN940031','16:40'],['1045','Ayesha Noor',1200,'MLN778811','11:14'],['1046','Hamza Ahmed',6000,'MLN778812','12:35'],['1047','Mariam Ali',2100,'MLN778813','13:09'],['1048','Ali Raza',1800,'MLN940039','15:45'],['1049','Ahmed Bilal',2500,'MLN778814','14:50'],['1050','Sara Khan',2500,'MLN778814','14:50'],['1051','Nida Saleem',3300,'MLN778815','17:11'],['1052','Zain Malik',900,'MLN778816',''],['1053','Hassan Shah',4000,'MLN778817','21:15']];
   const orders=specs.map(([id,name,a])=>({id,name,due:a*100,account:'shop-wallet',currency:'PKR'}));
-  const claims=specs.map(([id,name,a,ref,t],i)=>({id:'c'+i,order:id,name,amount:a*100,ref,at:t?'2026-10-09T'+t:'',account:'shop-wallet',confirmed:!!t,filename:'receipt-'+id+'.png',mode:'sample',digest:'demo-'+i}));
+  const claims=specs.map(([id,name,a,ref,t],i)=>({id:'c'+i,order:id,name,amount:a*100,ref,at:t?'2026-10-09T'+t:'',account:'shop-wallet',confirmed:!!t,filename:'receipt-'+id+'.png',status_text:'Successful',mode:'sample',digest:'demo-'+i}));
   const lines=claims.filter((_,i)=>[0,3,4,5,7,9].includes(i)).map((q,i)=>({id:'s'+i,name:q.name,amount:q.amount,ref:q.ref,time:timestamp(q.at),direction:'CREDIT',currency:'PKR',account:'shop-wallet'}));
   lines.push({id:'s6',name:'Shahid Ahmed',amount:420000,ref:'MLN771111',time:timestamp('2026-10-09T16:04'),direction:'CREDIT',currency:'PKR',account:'shop-wallet'},{id:'s7',name:'Sana Malik',amount:420000,ref:'MLN772222',time:timestamp('2026-10-09T16:09'),direction:'CREDIT',currency:'PKR',account:'shop-wallet'});
   return {orders,claims,lines,coverage:{start:'2026-10-09T08:00',end:'2026-10-09T20:00',complete:true},referenceVerified:true};
