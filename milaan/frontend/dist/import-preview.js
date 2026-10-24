@@ -80,9 +80,11 @@ export async function reviewImport(file,kind,options={}) {
   $('#preview-confirm').onchange=()=>{$('#preview-save').disabled=!$('#preview-confirm').checked||!preview||preview.rejected>0||preview.accepted===0;};
   update();dialog.showModal();
   return new Promise(resolve=>{
-    let result=null;
-    $('#preview-cancel').onclick=()=>dialog.close();
-    $('#preview-save').onclick=()=>{if(!preview||preview.rejected||!$('#preview-confirm').checked)return;result=new File([preview.csv],file.name,{type:'text/csv'});result.provenance={source_sha256:digest,mapping,timezone:$('#preview-timezone')?.value||'+05:00'};dialog.close();};
-    dialog.onclose=()=>{dialog.remove();resolve(result);};
+    let settled=false;
+    const finish=result=>{if(settled)return;settled=true;dialog.close();dialog.remove();resolve(result);};
+    $('#preview-cancel').onclick=()=>finish(null);
+    dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null);});
+    $('#preview-save').onclick=()=>{if(!preview||preview.rejected||!$('#preview-confirm').checked)return;const result=new File([preview.csv],file.name,{type:'text/csv'});result.provenance={source_sha256:digest,mapping,timezone:$('#preview-timezone')?.value||'+05:00'};finish(result);};
+    dialog.onclose=()=>finish(null);
   });
 }
