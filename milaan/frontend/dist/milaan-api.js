@@ -52,6 +52,7 @@ export class MilaanAPI {
   updateOrder(id, order, revision) { return this.request(`/api/orders/${id}`, { method: 'PATCH', body: { ...order, expected_revision: revision } }); }
   upload(path, file, fields) {
     const body = new FormData(); body.append('file', file);
+    if(file.provenance)body.append('provenance',JSON.stringify(file.provenance));
     Object.entries(fields).forEach(([key, value]) => body.append(key, String(value)));
     return this.request(path, { method: 'POST', body });
   }

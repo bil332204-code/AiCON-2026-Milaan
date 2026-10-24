@@ -52,3 +52,12 @@ cross-batch uniqueness. Saved-backend decisions are authoritative for saved batc
 account-scoped credit keys and database uniqueness prevent retained credit reuse.
 Human decisions are explicit overrides with reasons and selected eligible credit;
 they preserve the machine verdict and do not execute shipping or payments.
+
+## V2 reviewed mapping
+
+The Import center now previews and maps source columns before submitting normalized
+CSV. See [Milestone A](V2_MILESTONE_A.md) for timezone selection, row rejection,
+warning behavior and private fingerprint/mapping provenance. Direct API clients may
+continue to submit canonical CSV unchanged. The API accepts optional `provenance`
+JSON; it does not trust this client-declared metadata as bank verification. Import
+rows remain subject to the canonical server contract above.

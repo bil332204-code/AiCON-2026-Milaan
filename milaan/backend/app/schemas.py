@@ -121,3 +121,19 @@ class CheckoutRequest(Strict):
 class OrderStatusUpdate(Strict):
     status: Literal["Pending", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"]
 
+
+
+class ImportProvenance(Strict):
+    """Client-declared source identity, not a proof of authenticity."""
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    mapping: dict[str, str] = Field(max_length=7)
+    timezone: Literal["+05:00", "Z"] = "+05:00"
+
+    @field_validator("mapping")
+    @classmethod
+    def safe_mapping(cls, value):
+        allowed = {"order_ref", "customer_name", "amount_due", "account_id", "currency",
+                   "posted_at", "direction", "amount", "counterparty", "transaction_id"}
+        if any(k not in allowed or len(v) > 200 for k, v in value.items()):
+            raise ValueError("Unsupported import mapping")
+        return value

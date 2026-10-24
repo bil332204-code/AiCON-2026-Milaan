@@ -76,6 +76,12 @@ Python 3.13 and Windows execution remain unverified.
 
 [Five-minute demo](docs/DEMO.md) · [Roman Urdu guide](DEMO_GUIDE_ROMAN_URDU.md).
 
+## V2 development
+
+[Milestone A](docs/V2_MILESTONE_A.md) adds reviewed CSV mapping, private import
+provenance, discrepancy filters and desktop/mobile browser tests with genuine
+synthetic screenshots. Advanced allocation remains a separate milestone.
+
 ## Verification
 
 ```sh
