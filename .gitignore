@@ -5,3 +5,6 @@ __pycache__/
 data/
 *.db
 *.pkl
+node_modules/
+test-results/
+playwright-report/
