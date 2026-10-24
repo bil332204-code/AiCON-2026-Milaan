@@ -83,3 +83,18 @@ A forward migration preserves whole allocations and guards against lossy rollbac
 Refund/reversal evidence and delayed or insufficient coverage remain review cases,
 not settlement assertions. [Evidence and genuine browser screenshots](V2_MILESTONE_B.md)
 record executed checks and the remaining operational limitations.
+
+
+## V3: cinematic design backed by independent authentication
+
+A midnight purple/blue and teal visual system now spans the actual landing page,
+login/signup, imports, saved results and review workspace. Native CSS/Canvas motion
+preserves keyboard navigation and reduced-motion behavior; synthetic fixture activity
+is visibly separated from real API-backed totals. The integrated backend adds
+HttpOnly cookie sessions, CSRF protection, verified signup, bounded remember-me,
+one-time password recovery and persistent account lockouts. Legacy hashes upgrade
+without changing account IDs, and unknown email verification is never silently trusted.
+A non-root integrated image and restart/persistence smoke test provide a deployment
+alternative. The existing hosted application and its identities remain untouched
+until source access and a safe supported migration exist. [Real screenshots and
+executed validation](V3_RELEASE.md) replace unverified marketing or deployment claims.
