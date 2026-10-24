@@ -15,7 +15,7 @@ export function timestamp(s){
   return Date.parse(s+(/(?:Z|[+-]\d{2}:\d{2})$/.test(s)?'':'+05:00'));
 }
 export const normRef=s=>String(s||'').trim().toUpperCase().replace(/\s/g,'');
-export const fullRef=s=>!!s&&!/[.*…•]|[xX]{2}|masked|last\s*\d/i.test(s)&&String(s).trim().length>=5;
+export const fullRef=s=>!!s&&!/[.*…•]|[xX]{2}|masked|last\s*\d/i.test(s)&&String(s).replace(/\s/g,'').length>=5;
 export function parseCSV(text){
   if(new TextEncoder().encode(text).length>2_000_000)throw Error('CSV must be smaller than 2 MB.');
   text=text.replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quoted=false,closed=false;
@@ -71,6 +71,7 @@ export function reconcile({orders,claims,lines,coverage,referenceVerified=false}
     base.candidates=[...new Map([...exact,...close].map(l=>[l.id,l])).values()];
     if((fullRef(claim.ref)&&refs.get(claim.account+'|'+normRef(claim.ref))>1)||(claim.digest&&digests.get(claim.digest)>1))return finish('review','REUSED_PROOF','This reference or screenshot is also claimed by another order.');
     if(!successfulStatus(claim.status_text))return finish('review','STATUS_CONFLICT','Payment status is missing, unrecognized, pending or unsuccessful. Check the receipt.');
+    if(exact.length&&lines.some(l=>l.direction==='DEBIT'&&l.currency==='PKR'&&l.account===order.account&&normRef(l.ref)===normRef(claim.ref)))return finish('review','REVERSAL','A same-reference debit may be a refund or reversal. Resolve the source evidence before allocating.');
     if(amount!==order.due)return finish('review','AMOUNT_CONFLICT','The screenshot amount does not equal the order total.');
     const start=timestamp(coverage.start),end=timestamp(coverage.end);
     if(!coverage.complete||!Number.isFinite(start)||!Number.isFinite(end)||end<=start||time<start||time>end)return finish('review','COVERAGE','The statement does not establish coverage for this claim.');
@@ -97,6 +98,7 @@ export function decide(results,id,status,lineId,reason){
     const line=row.candidates.find(l=>l.id===lineId);if(!line)throw Error('Select a candidate statement credit.');
     if(line.amount!==row.order.due||line.account!==row.order.account||line.direction!=='CREDIT')throw Error('This credit cannot cover the order exactly.');
     if(results.some(r=>r.id!==id&&r.status==='ship'&&r.allocated===lineId))throw Error('This credit is already assigned to another order.');
+    if(row.code==='REVERSAL')throw Error('Resolve refund or reversal evidence before shipping.');
     if(row.code==='DUPLICATE_CREDIT')throw Error('Resolve the duplicate statement records and reconcile again.');
   }
   return results.map(r=>r.id===id?{...r,status,allocated:status==='ship'?lineId:null,decision:{status,reason:reason.trim(),at:new Date().toISOString()}}:r);
