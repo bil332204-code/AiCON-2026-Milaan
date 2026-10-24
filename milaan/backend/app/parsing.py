@@ -63,13 +63,20 @@ def parse_statement(raw, owner_id, account_id, max_rows=2000):
     output, seen = [], set()
     required = {"posted_at", "direction", "amount", "counterparty", "transaction_id"}
     for i, r in enumerate(csv_rows(raw, max_rows), 2):
-        if not required.issubset(r): raise ValueError("Statement headers: posted_at,direction,amount,counterparty,transaction_id,account_id,currency")
+        if not required.issubset(r): raise ValueError("Statement requires headers: posted_at,direction,amount,counterparty,transaction_id (account_id and currency are optional)")
         if r.get("account_id", account_id) != account_id: raise ValueError(f"Row {i}: account differs from the declared account")
         if r.get("currency", "PKR") != "PKR": raise ValueError("Only PKR is supported")
         direction = r["direction"].upper()
         if direction not in {"CREDIT", "DEBIT"}: raise ValueError(f"Row {i}: direction must be CREDIT or DEBIT")
         if len(r["transaction_id"]) > 150 or len(r["counterparty"]) > 200: raise ValueError("Statement text field too long")
-        posted, amount = parse_time(r["posted_at"]), paisa(r["amount"])
+        try:
+            posted = parse_time(r["posted_at"])
+        except ValueError as exc:
+            raise ValueError(f"Statement row {i}, posted_at: {exc}") from exc
+        try:
+            amount = paisa(r["amount"])
+        except ValueError as exc:
+            raise ValueError(f"Statement row {i}, amount: {exc}") from exc
         fingerprint = (posted, direction, amount, norm_ref(r["transaction_id"]), r["counterparty"])
         if fingerprint in seen: raise ValueError(f"Row {i}: duplicate statement record")
         seen.add(fingerprint)

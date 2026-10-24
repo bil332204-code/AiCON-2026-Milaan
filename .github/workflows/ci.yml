@@ -1,0 +1,30 @@
+name: Local release checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  local-demo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: sqlite:////tmp/milaan-ci.db
+      STORAGE_DIR: /tmp/milaan-ci-uploads
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python -m pip install -r milaan/backend/requirements.txt
+      - run: python -m pip check
+      - run: python -m compileall -q milaan/backend/app demo-store/server.py tests
+      - run: python -m pytest tests matching/tests
+        working-directory: milaan/backend
+      - run: python -m alembic upgrade head && python -m alembic check
+        working-directory: milaan/backend
+      - run: python -m pytest tests/test_store_sync.py tests/test_migrations.py
+      - run: python tests/live_demo_check.py
+      - run: node --test milaan/frontend/tests/*.test.mjs
+      - run: npm --prefix milaan/frontend run check

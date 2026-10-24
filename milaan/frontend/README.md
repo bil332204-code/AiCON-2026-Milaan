@@ -1,3 +1,5 @@
+> Inherited component reference. For this repository, follow [canonical local setup](../../README_FIRST.md); root instructions take precedence. Hosted features are separately maintained and unverified here.
+
 > Version 1.2: demo navigation fixed; email verification supported. Read UPDATE_GUIDE.md for updating both folders and configuring email.
 
 # Milaan cinematic website — connected frontend

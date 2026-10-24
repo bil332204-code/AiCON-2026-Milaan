@@ -143,7 +143,7 @@ export function createBackend(hooks) {
     const draft={...getState().claims.find(c=>c.id===id)};if(!draft.id)throw Error('Receipt missing.');
     if(!await ensureEditable())return;
     const current=getState().claims.find(c=>c.id===id);
-    await api.updateClaim(id,current.version,{...draft.fields,is_payment_receipt:draft.fields.is_payment_receipt!==false,amount_pkr:draft.amount?(draft.amount/100).toFixed(2):null,datetime_local:draft.at||null,transaction_id:draft.ref||null,sender_name:draft.name||null,unreadable_fields:draft.confirmed?[]:draft.fields.unreadable_fields||[]},draft.confirmed);
+    await api.updateClaim(id,current.version,{...draft.fields,status_text:draft.status_text||null,is_payment_receipt:draft.fields.is_payment_receipt!==false,amount_pkr:draft.amount?(draft.amount/100).toFixed(2):null,datetime_local:draft.at||null,transaction_id:draft.ref||null,sender_name:draft.name||null,unreadable_fields:draft.confirmed?[]:draft.fields.unreadable_fields||[]},draft.confirmed);
     await load(getState().remote.id,'imports');toast('Receipt fields saved.');
   });}
   async function decision(row,status,line,reason){return guarded(async()=>{await api.decide(row.matchId,row.version,status,reason,line||null);await load(getState().remote.id,'results');toast('Review decision saved.');});}

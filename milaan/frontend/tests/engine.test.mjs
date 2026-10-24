@@ -16,3 +16,17 @@ test('multiple source credits sharing a full reference require source resolution
 test('fuzzy amount/time candidates cannot automatically approve',()=>{const d=demoData();d.claims[0].ref='UNKNOWN123';assert.equal(reconcile(d)[0].code,'POSSIBLE_MATCH');});
 test('CSV export neutralises formulas and retains original machine decision',()=>{const r=reconcile(demoData());r[0].order.name='=CMD()';const csv=exportCSV(r,'TEST');assert.ok(csv.includes('"\'=CMD()"'));assert.ok(csv.includes('machine_status'));});
 test('local text extraction offers only labelled amount/reference hints',()=>{assert.deepEqual(receiptHints('Payment sent\nPKR 3,500.00\nTransaction ID: MLN778810'),{amount:'3,500.00',ref:'MLN778810'});assert.equal(receiptHints('Random image with a 3500 in it').amount,'');});
+
+test('only recognized successful payment statuses can automatically ship',()=>{
+  for(const status of [undefined,'','pending','failed','unsuccessful','not successful','unknown','processing']){
+    const d=demoData();d.claims[0].status_text=status;
+    const r=reconcile(d)[0];assert.equal(r.status,'review',String(status));assert.equal(r.code,'STATUS_CONFLICT');
+  }
+  for(const status of ['success',' Successful ','COMPLETED','paid','payment successful','transaction successful']){
+    const d=demoData();d.claims[0].status_text=status;assert.equal(reconcile(d)[0].status,'ship');
+  }
+});
+
+test('CSV limit measures UTF-8 bytes rather than character count',()=>{
+  assert.throws(()=>parseCSV('name\n'+'ع'.repeat(1_000_000)),/2 MB/);
+});

@@ -1,3 +1,5 @@
+> Inherited component reference. For this repository, follow [canonical local setup](../../README_FIRST.md); root instructions take precedence. Hosted features are separately maintained and unverified here.
+
 # Milaan update: demo navigation and email verification
 
 ## Update your two existing folders (Windows)

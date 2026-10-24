@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 if exist ".venv\Scripts\python.exe" goto install
-py -3.13 -m venv .venv
+py -3.12 -m venv .venv
 if errorlevel 1 python -m venv .venv
 if errorlevel 1 goto fail
 :install
