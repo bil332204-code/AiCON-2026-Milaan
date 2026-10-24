@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import timedelta, datetime, timezone
 from pathlib import Path
-import json, threading, secrets
+import json, threading, secrets, hashlib
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Header, Request, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .database import Database
 from .models import PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
-from .schemas import VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
+from .schemas import ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
 from .emailer import send_verification
 from .security import password_hash, verify_password, issue_session, token_digest
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
@@ -41,6 +41,16 @@ def user_record(user):
         "display_name": user.display_name,
         "is_admin": bool(getattr(user, "is_admin", False)),
     }
+
+def import_provenance(raw, declared):
+    metadata = {"stored_csv_sha256": hashlib.sha256(raw).hexdigest()}
+    if declared:
+        try:
+            metadata["client_declared_source"] = ImportProvenance.model_validate_json(declared).model_dump()
+        except ValueError:
+            raise HTTPException(422, "Invalid import provenance metadata")
+    return metadata
+
 
 def create_app(settings=None):
     settings = settings or Settings()
@@ -292,14 +302,16 @@ def create_app(settings=None):
         return {"items": [record(o) for o in db.scalars(select(Order).where(Order.batch_id == batch_id).order_by(Order.order_ref))]}
 
     @app.post("/api/batches/{batch_id}/orders", status_code=201, tags=["orders"])
-    async def upload_orders(batch_id: str, file: UploadFile = File(...), expected_revision: int = Form(...), user=Depends(current_user), db=Depends(get_db)):
+    async def upload_orders(batch_id: str, file: UploadFile = File(...), expected_revision: int = Form(...), provenance: str = Form("", max_length=4000), user=Depends(current_user), db=Depends(get_db)):
         b = mutable(db, batch_id, user, expected_revision)
         if db.scalar(select(Order.id).where(Order.batch_id == b.id).limit(1)): raise HTTPException(409, "Orders already exist. Edit individual orders or create a new batch.")
-        try: data = parse_orders(await file.read(), settings.max_rows)
+        raw = await file.read()
+        metadata = import_provenance(raw, provenance)
+        try: data = parse_orders(raw, settings.max_rows)
         except ValueError as e: raise HTTPException(422, str(e))
         orders = [Order(batch_id=b.id, **row) for row in data]
         db.add_all(orders); b.revision += 1
-        audit(db, b.id, user.id, "orders_imported", {"count": len(orders)})
+        audit(db, b.id, user.id, "orders_imported", {"count": len(orders), "rejected": 0, "provenance": metadata})
         db.commit(); return {"batch": record(b), "items": [record(o) for o in orders]}
 
     @app.post("/api/batches/{batch_id}/orders/item", status_code=201, tags=["orders"])
@@ -334,19 +346,21 @@ def create_app(settings=None):
     async def upload_statement(batch_id: str, file: UploadFile = File(...), expected_revision: int = Form(...),
                                account_id: str = Form(..., min_length=1, max_length=100), coverage_start: str = Form(...), coverage_end: str = Form(...),
                                complete: bool = Form(False), references_verified: bool = Form(False), provider_pair: str = Form("unknown", max_length=150),
-                               user=Depends(current_user), db=Depends(get_db)):
+                               provenance: str = Form("", max_length=4000), user=Depends(current_user), db=Depends(get_db)):
         b = mutable(db, batch_id, user, expected_revision)
+        raw = await file.read()
+        metadata = import_provenance(raw, provenance)
         try:
             start, end = parse_time(coverage_start), parse_time(coverage_end)
             if end <= start: raise ValueError("Coverage end must follow start")
-            data = parse_statement(await file.read(), user.id, account_id, settings.max_rows)
+            data = parse_statement(raw, user.id, account_id, settings.max_rows)
             if any(not start <= r["posted_at"] <= end for r in data): raise ValueError("A statement row falls outside its declared coverage")
         except ValueError as e: raise HTTPException(422, str(e))
         s = Statement(batch_id=b.id, account_id=account_id, provider_pair=provider_pair, coverage_start=start, coverage_end=end,
                       complete=complete, references_verified=references_verified, filename=Path(file.filename or "statement.csv").name[:200])
         db.add(s); db.flush()
         db.add_all(StatementLine(batch_id=b.id, statement_id=s.id, **row) for row in data)
-        b.revision += 1; audit(db, b.id, user.id, "statement_imported", {"account_id": account_id, "rows": len(data), "coverage_declared": complete})
+        b.revision += 1; audit(db, b.id, user.id, "statement_imported", {"account_id": account_id, "rows": len(data), "coverage_declared": complete, "rejected": 0, "provenance": metadata})
         db.commit(); return {"batch": record(b), "statement": record(s), "line_count": len(data)}
 
     @app.get("/api/statements/{statement_id}/lines", tags=["statements"])

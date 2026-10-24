@@ -1,3 +1,4 @@
+import {reviewImport} from './import-preview.js';
 import {MilaanAPI} from './milaan-api.js';
 import {mapRemote} from './remote-state.js';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -69,7 +70,7 @@ export function createBackend(hooks) {
     if(getState().remote?.id!==id){dispose();cache.clear();}
     const mapped=mapRemote(batch,orders.items,claims.items,statements.items,allLines,results.items,events.items);
     mapped.claims.forEach(c=>c.url=cache.get(c.id)||null);
-    setState({...getState(),...mapped,view,filter:'all',query:'',error:''});render();return batch;
+    setState({...getState(),...mapped,view,filter:'all',reasonFilter:'',query:'',error:''});render();return batch;
   }
   async function newBatch(){
     if(!api.token)return authenticate('new');
@@ -105,21 +106,23 @@ export function createBackend(hooks) {
   }
   async function upload(kind,files){return guarded(async()=>{
     if(getState().claims.some(c=>c.dirty))throw Error('Save edited receipt fields before uploading more records.');
+    let reviewedFile;
     const draft={coverage:{...getState().coverage},references:getState().referenceVerified,account:$('#statement-account')?.value?.trim(),orderId:$('#upload-order')?.value};
+    if(kind!=='claims'){reviewedFile=await reviewImport(files[0],kind,kind==='statement'?{account:draft.account,coverage:draft.coverage}:{});if(!reviewedFile)return;}
     if(!await ensureEditable())return;
     let state=getState(),batch=state.remote;
-    if(kind==='orders'){if(state.orders.length)throw Error('Orders already exist. Create another batch to replace the order CSV.');await api.uploadOrders(batch.id,files[0],batch.revision);}
+    if(kind==='orders'){if(state.orders.length)throw Error('Orders already exist. Create another batch to replace the order CSV.');await api.uploadOrders(batch.id,reviewedFile,batch.revision);}
     else if(kind==='statement'){
       const account=draft.account;
       if(!account||!draft.coverage.start||!draft.coverage.end)throw Error('Set receiving account and actual statement period before uploading.');
       if(state.statements.some(s=>s.account_id===account))throw Error('A statement for this account already exists. Remove it before importing a replacement.');
-      await api.uploadStatement(batch.id,files[0],batch.revision,{account_id:account,coverage_start:draft.coverage.start,coverage_end:draft.coverage.end,complete:draft.coverage.complete,references_verified:draft.references,provider_pair:'seller-declared-profile'});
+      await api.uploadStatement(batch.id,reviewedFile,batch.revision,{account_id:account,coverage_start:draft.coverage.start,coverage_end:draft.coverage.end,complete:draft.coverage.complete,references_verified:draft.references,provider_pair:'seller-declared-profile'});
     }else{
       const order=state.orders.find(o=>o.serverId===draft.orderId);if(!order)throw Error('Choose the order these screenshots belong to first.');
       if(state.claims.length+files.length>100)throw Error('Use at most 100 screenshots per batch.');
       for(const file of files){const uploaded=await api.uploadClaim(batch.id,order.serverId,file,batch.revision);batch=uploaded.batch;toast(`Uploaded ${file.name}`);}
     }
-    await load(batch.id,'imports');toast('Saved to your backend.');
+    await load(batch.id,'imports');toast(kind==='claims'?'Saved to your backend.':'Reviewed import saved: '+(kind==='orders'?getState().orders.length:getState().lines.filter(l=>l.account===draft.account).length)+' accepted · 0 rejected.');
   });}
   async function run(){return guarded(async()=>{
     if(getState().claims.some(c=>c.dirty))throw Error('Save your edited receipt fields before reconciling.');

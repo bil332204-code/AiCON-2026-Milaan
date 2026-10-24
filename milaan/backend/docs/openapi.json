@@ -1754,6 +1754,12 @@
           "expected_revision": {
             "type": "integer",
             "title": "Expected Revision"
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Provenance",
+            "default": ""
           }
         },
         "type": "object",
@@ -1803,6 +1809,12 @@
             "maxLength": 150,
             "title": "Provider Pair",
             "default": "unknown"
+          },
+          "provenance": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Provenance",
+            "default": ""
           }
         },
         "type": "object",
