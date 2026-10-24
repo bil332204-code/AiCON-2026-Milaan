@@ -59,7 +59,15 @@ with tempfile.TemporaryDirectory() as tmp:
                 if items:break
                 time.sleep(.2)
             assert items and items[0]['final_status']=='ship',items
-            print('Receipt mode: human-confirmed fields -> live reconciliation -> SHIP.',flush=True)
+            # Persist a human override and verify exported data through actual HTTP.
+            match=items[0]
+            review=httpx.post(m+f"/api/matches/{match['id']}/decision",headers=headers,
+                json={'expected_version':match['version'],'decision':'hold','reason':'Synthetic operator requests another check'},trust_env=False)
+            assert review.status_code==200,review.text
+            exported=httpx.get(m+f'/api/batches/{bid}/export.csv',headers=headers,trust_env=False)
+            assert exported.status_code==200 and 'Synthetic operator requests another check' in exported.text
+            assert httpx.get(m+f'/api/batches/{bid}/export.csv',trust_env=False).status_code==401
+            print('Receipt mode: human-confirmed fields -> SHIP -> saved human HOLD -> private CSV export.',flush=True)
             assert httpx.get(store+f'/api/orders/{oid}/receipt.jpg',trust_env=False).status_code==401
             assert httpx.get(m+'/',trust_env=False).status_code==200
             print('Receipt mode waits for reading; private receipt requires login; Milaan frontend served.',flush=True)

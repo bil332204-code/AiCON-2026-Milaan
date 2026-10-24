@@ -129,3 +129,9 @@ def test_manual_mode_and_extraction_consent(env, auth, jpeg, monkeypatch):
     assert 'fake-unit-test-key' not in str(claims)
     retry = c.post('/api/claims/'+claim['id']+'/retry-extraction', headers=auth, json={'expected_version': claims[0]['version']})
     assert retry.status_code == 200 and retry.json()['claim']['extraction_status'] == 'pending'
+    # Failed AI reads and retries do not prevent manual recovery.
+    latest = retry.json()['claim']
+    confirm(c, auth, latest)
+    result = reconcile(env, auth, b['id'], 'manual-after-provider-failure')
+    assert result['summary']['ship'] == 1
+    assert c.get(f'/api/batches/{b["id"]}/export.csv', headers=auth).status_code == 200

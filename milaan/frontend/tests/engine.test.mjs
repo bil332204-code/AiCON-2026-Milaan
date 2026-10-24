@@ -26,3 +26,7 @@ test('only recognized successful payment statuses can automatically ship',()=>{
     const d=demoData();d.claims[0].status_text=status;assert.equal(reconcile(d)[0].status,'ship');
   }
 });
+
+test('CSV limit measures UTF-8 bytes rather than character count',()=>{
+  assert.throws(()=>parseCSV('name\n'+'ع'.repeat(1_000_000)),/2 MB/);
+});
