@@ -63,3 +63,23 @@ with Database(os.environ['DATABASE_URL']).transaction() as db:
     failed=migrate('downgrade','20261024_unique_indexes',check=False)
     assert failed.returncode!=0 and 'Cannot downgrade partial allocations' in failed.stderr
     with sqlite3.connect(database) as db: assert db.execute('SELECT amount_paisa FROM allocations').fetchone()==(6000,)
+
+
+def test_browser_auth_migration_preserves_users_and_bearer_sessions(tmp_path):
+    database=tmp_path/'auth-migration.db';env={**os.environ,'DATABASE_URL':f'sqlite:///{database}'}
+    backend=Path(__file__).resolve().parents[1]/'milaan/backend'
+    def migrate(*args):subprocess.run([sys.executable,'-m','alembic',*args],cwd=backend,env=env,check=True,capture_output=True)
+    migrate('upgrade','20261024_payment_parts')
+    with sqlite3.connect(database) as db:
+        db.execute("INSERT INTO users (id,email,password_hash,display_name,is_admin,created_at) VALUES ('legacy-user','legacy@example.com','scrypt$legacy$hash','Synthetic legacy',0,'2026-10-25')")
+        db.execute("INSERT INTO session_tokens (token_hash,user_id,expires_at) VALUES ('legacy-bearer','legacy-user','2026-11-25')")
+    migrate('upgrade','head');migrate('check')
+    with sqlite3.connect(database) as db:
+        assert db.execute('SELECT id,password_hash,failed_logins,login_locked_until FROM users').fetchall()==[('legacy-user','scrypt$legacy$hash',0,None)]
+        assert db.execute('SELECT token_hash,user_id,session_kind FROM session_tokens').fetchall()==[('legacy-bearer','legacy-user','bearer')]
+        db.execute("INSERT INTO session_tokens (token_hash,user_id,expires_at,session_kind) VALUES ('cookie-credential','legacy-user','2026-11-25','cookie')")
+    migrate('downgrade','20261024_payment_parts')
+    with sqlite3.connect(database) as db:
+        assert db.execute('SELECT id,password_hash FROM users').fetchall()==[('legacy-user','scrypt$legacy$hash')]
+        assert db.execute('SELECT token_hash FROM session_tokens').fetchall()==[('legacy-bearer',)]
+    migrate('upgrade','head');migrate('check')

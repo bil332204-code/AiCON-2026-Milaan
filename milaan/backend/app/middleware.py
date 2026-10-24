@@ -14,9 +14,9 @@ class GuardMiddleware:
         method, path = scope["method"], scope["path"]
         async def guarded_send(message):
             if message["type"] == "http.response.start":
-                message.setdefault("headers", []).extend([(b"x-content-type-options", b"nosniff"), (b"cache-control", b"no-store"), (b"referrer-policy", b"no-referrer")])
+                message.setdefault("headers", []).extend([(b"x-content-type-options", b"nosniff"), (b"cache-control", b"no-store"), (b"referrer-policy", b"no-referrer"), (b"content-security-policy", b"frame-ancestors 'none'; base-uri 'self'; object-src 'none'")])
             await send(message)
-        if not self.testing and method == "POST" and path in {"/api/auth/login", "/api/auth/register", "/api/auth/verify-email", "/api/auth/resend-code"}:
+        if not self.testing and method == "POST" and path in {"/api/auth/login", "/api/auth/register", "/api/auth/verify-email", "/api/auth/resend-code", "/api/auth/request-password-reset", "/api/auth/reset-password"}:
             key = scope.get("client", ("unknown",))[0]
             with self.lock:
                 t = time.monotonic()

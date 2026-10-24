@@ -1,26 +1,29 @@
+from .browser_auth import check_origin, check_csrf, session_result
 from .allocations import lock_seller, remaining_credit, add_allocation
 from .allocation_review import review_allocations
 from contextlib import asynccontextmanager
 from datetime import timedelta, datetime, timezone
 from pathlib import Path
-import json, threading, secrets, hashlib
+import json, threading, secrets, hashlib, logging
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Header, Request, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi.responses import JSONResponse, FileResponse, Response, RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select, delete, func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .database import Database
-from .models import PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
-from .schemas import AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
-from .emailer import send_verification
-from .security import password_hash, verify_password, issue_session, token_digest
+from .models import PasswordReset, PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
+from .schemas import ResetRequest, ResetPassword, AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
+from .emailer import send_verification, send_password_reset
+from .security import password_hash, verify_password, issue_session, token_digest, csrf_token
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
 from .storage import clean_image, image_path
 from .middleware import GuardMiddleware
 from .jobs import audit, worker_loop
+
+DUMMY_PASSWORD_HASH = password_hash(secrets.token_urlsafe(32))
 
 DEFAULT_CONTENT = {
     "branding": {"product_name": "Milaan", "tagline": "Every payment, in its place.", "hero_title": "Find the match. Before you ship."},
@@ -30,6 +33,7 @@ DEFAULT_CONTENT = {
 }
 
 def record(obj):
+    if obj is None: return None
     data = {}
     for column in inspect(obj).mapper.column_attrs:
         value = getattr(obj, column.key)
@@ -41,6 +45,7 @@ def user_record(user):
         "id": user.id,
         "email": user.email,
         "display_name": user.display_name,
+        "email_verified": bool(user.email_verified_at),
         "is_admin": bool(getattr(user, "is_admin", False)),
     }
 
@@ -78,9 +83,9 @@ def create_app(settings=None):
     app = FastAPI(title="Milaan Backend", version="1.0.0", description="Persistent seller-scoped reconciliation API. Amounts are integer paisa. Times returned as UTC.", lifespan=lifespan)
     app.state.database, app.state.settings = database, settings
     app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing)
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=False,
+    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-                       allow_headers=["Authorization", "Content-Type", "Idempotency-Key"], expose_headers=["Content-Disposition"])
+                       allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"], expose_headers=["Content-Disposition"])
     bearer = HTTPBearer(auto_error=False)
 
     @app.exception_handler(RequestValidationError)
@@ -100,12 +105,18 @@ def create_app(settings=None):
             finally:
                 db.rollback()
 
-    def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db=Depends(get_db)):
-        if not credentials or credentials.scheme.lower() != "bearer": raise HTTPException(401, "Bearer session token required", headers={"WWW-Authenticate": "Bearer"})
-        session = db.get(SessionToken, token_digest(credentials.credentials))
-        if not session or session.expires_at <= now(): raise HTTPException(401, "Session is invalid or expired")
+    def current_user(request: Request, credentials: HTTPAuthorizationCredentials | None = Depends(bearer), db=Depends(get_db)):
+        kind = 'bearer' if credentials else 'cookie'
+        raw = credentials.credentials if credentials else request.cookies.get(settings.cookie_name)
+        if not raw: raise HTTPException(401, 'Sign in to continue', headers={'WWW-Authenticate':'Bearer'})
+        session = db.get(SessionToken, token_digest(raw))
+        if not session or session.expires_at <= now() or session.session_kind != kind:
+            raise HTTPException(401, 'Session is invalid or expired')
+        if kind == 'cookie' and request.method not in {'GET','HEAD','OPTIONS'}:
+            check_csrf(request, settings, raw)
         user = db.get(User, session.user_id)
-        if not user: raise HTTPException(401, "Session is invalid")
+        if not user: raise HTTPException(401, 'Session is invalid')
+        request.state.session_raw, request.state.auth_session = raw, session
         return user
 
     def require_admin(user=Depends(current_user)):
@@ -165,7 +176,7 @@ def create_app(settings=None):
     @app.post("/api/auth/resend-code", tags=["auth"])
     def resend_code(body: ResendEmail, db=Depends(get_db)):
         if not settings.registration_open: raise HTTPException(403, "Registration is disabled")
-        pending = db.scalar(select(PendingSignup).where(PendingSignup.challenge_id == body.challenge_id).with_for_update())
+        pending = db.scalar(select(PendingSignup).where(PendingSignup.challenge_id == body.challenge_id, PendingSignup.user_id.is_(None)).with_for_update())
         if not pending: raise HTTPException(400, "Signup expired or completed. Start signup again")
         check_send_limit(pending)
         deliver_code(pending)
@@ -173,9 +184,10 @@ def create_app(settings=None):
         return verification_response(pending)
 
     @app.post("/api/auth/verify-email", tags=["auth"])
-    def verify_email(body: VerifyEmail, db=Depends(get_db)):
+    def verify_email(body: VerifyEmail, request: Request, response: Response, db=Depends(get_db)):
+        if body.session_mode == "cookie": check_origin(request, settings)
         if not settings.registration_open: raise HTTPException(403, "Registration is disabled")
-        pending = db.scalar(select(PendingSignup).where(PendingSignup.challenge_id == body.challenge_id).with_for_update())
+        pending = db.scalar(select(PendingSignup).where(PendingSignup.challenge_id == body.challenge_id, PendingSignup.user_id.is_(None)).with_for_update())
         if not pending: raise HTTPException(400, "Signup expired or completed. Start signup again")
         if pending.expires_at <= now(): raise HTTPException(400, "Code expired. Request a new code")
         if pending.attempts >= 5: raise HTTPException(429, "Too many incorrect codes. Request a new code")
@@ -183,15 +195,16 @@ def create_app(settings=None):
             pending.attempts += 1
             db.commit()
             raise HTTPException(400, "Incorrect code. Check your email")
-        user = User(email=pending.email, password_hash=pending.password_hash, display_name=pending.display_name)
+        user = User(email=pending.email, password_hash=pending.password_hash, display_name=pending.display_name, email_verified_at=now())
         db.add(user); db.flush()
-        token = issue_session(db, user.id, settings.session_hours)
+        token = session_result(db, user.id, body.session_mode, request, response, settings)
         db.delete(pending)
         db.commit()
         return {**token, "user": user_record(user)}
 
     @app.post("/api/auth/register", status_code=201, tags=["auth"])
-    def register(body: Register, db=Depends(get_db)):
+    def register(body: Register, request: Request, response: Response, db=Depends(get_db)):
+        if body.session_mode == "cookie": check_origin(request, settings)
         if not settings.registration_open: raise HTTPException(403, "Registration is disabled")
         if db.scalar(select(User).where(User.email == str(body.email).lower())): raise HTTPException(409, "Account cannot be created with this email")
         if settings.require_email_verification:
@@ -212,26 +225,116 @@ def create_app(settings=None):
             return verification_response(pending)
         user = User(email=str(body.email).lower(), password_hash=password_hash(body.password), display_name=body.display_name)
         db.add(user); db.flush()
-        token = issue_session(db, user.id, settings.session_hours)
+        token = session_result(db, user.id, body.session_mode, request, response, settings)
         db.commit()
         return {**token, "user": user_record(user)}
 
-    @app.post("/api/auth/login", tags=["auth"])
-    def login(body: Login, db=Depends(get_db)):
-        user = db.scalar(select(User).where(User.email == str(body.email).lower()))
-        if not user or not verify_password(body.password, user.password_hash): raise HTTPException(401, "Incorrect email or password")
-        token = issue_session(db, user.id, settings.session_hours)
+    @app.post('/api/auth/login', tags=['auth'])
+    def login(body: Login, request: Request, response: Response, db=Depends(get_db)):
+        if body.session_mode == 'cookie': check_origin(request, settings)
+        user = db.scalar(select(User).where(User.email == str(body.email).lower()).with_for_update())
+        locked = bool(user and user.login_locked_until and user.login_locked_until > now())
+        valid = verify_password(body.password, user.password_hash if user and not locked else DUMMY_PASSWORD_HASH)
+        if not user or locked or not valid:
+            if user and not locked:
+                if user.login_locked_until: user.failed_logins, user.login_locked_until = 0, None
+                user.failed_logins += 1
+                if user.failed_logins >= 5: user.login_locked_until = now()+timedelta(minutes=15)
+                db.commit()
+            raise HTTPException(401, 'Incorrect email or password, or account temporarily unavailable. Try again later.')
+        user.failed_logins, user.login_locked_until = 0, None
+        if not user.password_hash.startswith('scrypt-v2$'): user.password_hash = password_hash(body.password)
+        token = session_result(db, user.id, body.session_mode, request, response, settings, body.remember_me)
         db.commit()
-        return {**token, "user": user_record(user)}
+        return {**token, 'user':user_record(user)}
 
-    @app.post("/api/auth/logout", status_code=204, tags=["auth"])
-    def logout(user=Depends(current_user), credentials=Depends(bearer), db=Depends(get_db)):
-        db.execute(delete(SessionToken).where(SessionToken.token_hash == token_digest(credentials.credentials)))
+    @app.post('/api/auth/logout', status_code=204, tags=['auth'])
+    def logout(request: Request, user=Depends(current_user), db=Depends(get_db)):
+        db.execute(delete(SessionToken).where(SessionToken.token_hash == token_digest(request.state.session_raw)))
         db.commit()
-        return Response(status_code=204)
+        response = Response(status_code=204)
+        response.delete_cookie(settings.cookie_name, path='/', secure=settings.cookie_secure, httponly=True, samesite='lax')
+        return response
 
-    @app.get("/api/auth/me", tags=["auth"])
+    @app.post('/api/auth/logout-all', status_code=204, tags=['auth'])
+    def logout_all(request: Request, user=Depends(current_user), db=Depends(get_db)):
+        db.execute(delete(SessionToken).where(SessionToken.user_id == user.id)); db.commit()
+        response = Response(status_code=204)
+        response.delete_cookie(settings.cookie_name, path='/', secure=settings.cookie_secure, httponly=True, samesite='lax')
+        return response
+
+    @app.get('/api/auth/session', tags=['auth'])
+    def browser_session(request: Request, user=Depends(current_user)):
+        return {'user':user_record(user), 'csrf_token':csrf_token(request.state.session_raw) if request.state.auth_session.session_kind == 'cookie' else None,
+                'expires_at':request.state.auth_session.expires_at.isoformat()+'Z'}
+
+    @app.get('/api/auth/me', tags=['auth'])
     def me(user=Depends(current_user)): return user_record(user)
+
+    @app.post('/api/auth/verify-account-email/start', tags=['auth'])
+    def start_account_email_verification(user=Depends(current_user), db=Depends(get_db)):
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if user.email_verified_at: return {'email_verified':True}
+        pending = db.scalar(select(PendingSignup).where(PendingSignup.email == user.email).with_for_update())
+        if pending: check_send_limit(pending)
+        else:
+            pending = PendingSignup(email=user.email, window_start=now(), send_count=0, attempts=0)
+            db.add(pending)
+        pending.user_id, pending.challenge_id = user.id, secrets.token_urlsafe(32)
+        pending.password_hash, pending.display_name = user.password_hash, user.display_name
+        deliver_code(pending);db.commit()
+        return verification_response(pending)
+
+    @app.post('/api/auth/verify-account-email', tags=['auth'])
+    def verify_account_email(body: VerifyEmail, user=Depends(current_user), db=Depends(get_db)):
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        pending = db.scalar(select(PendingSignup).where(PendingSignup.user_id == user.id,
+                            PendingSignup.email == user.email, PendingSignup.challenge_id == body.challenge_id).with_for_update())
+        if not pending or pending.expires_at <= now(): raise HTTPException(400, 'Verification expired; request a new code')
+        if pending.attempts >= 5: raise HTTPException(429, 'Too many incorrect codes; request a new code')
+        if not verify_password(body.code, pending.code_hash):
+            pending.attempts += 1;db.commit();raise HTTPException(400, 'Incorrect code')
+        user.email_verified_at = now();db.delete(pending);db.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id));db.commit()
+        return user_record(user)
+
+    @app.post('/api/auth/request-password-reset', tags=['auth'])
+    def request_password_reset(body: ResetRequest, request: Request, db=Depends(get_db)):
+        check_origin(request, settings)
+        message = {'message':'If that address has an account, check your inbox for reset instructions.'}
+        user = db.scalar(select(User).where(User.email == str(body.email).lower()).with_for_update())
+        if not user or not user.email_verified_at: return message
+        pending = db.get(PasswordReset, user.id)
+        if pending:
+            if (now()-pending.last_sent_at).total_seconds()<60: return message
+            if (now()-pending.window_start).total_seconds()>=3600: pending.window_start, pending.send_count = now(), 0
+            if pending.send_count>=5: return message
+        raw = secrets.token_urlsafe(48)
+        if not pending:
+            pending = PasswordReset(user_id=user.id,window_start=now(),send_count=0)
+            db.add(pending)
+        pending.token_hash, pending.expires_at, pending.last_sent_at = token_digest(raw), now()+timedelta(minutes=15), now()
+        pending.send_count += 1
+        try: send_password_reset(settings, user.email, raw)
+        except Exception:
+            logging.getLogger('milaan.auth').warning('Password recovery email delivery failed; check configured SMTP transport')
+        db.commit()
+        return message
+
+    @app.post('/api/auth/reset-password', tags=['auth'])
+    def reset_password(body: ResetPassword, request: Request, response: Response, db=Depends(get_db)):
+        check_origin(request, settings)
+        pending = db.scalar(select(PasswordReset).where(PasswordReset.token_hash == token_digest(body.token)))
+        if not pending: raise HTTPException(400, 'Reset link is invalid or expired. Request a new one.')
+        # Lock order is user then reset record in both recovery endpoints.
+        user = db.scalar(select(User).where(User.id == pending.user_id).with_for_update())
+        pending = db.scalar(select(PasswordReset).where(PasswordReset.user_id == pending.user_id, PasswordReset.token_hash == token_digest(body.token)).with_for_update().execution_options(populate_existing=True))
+        if not user or not user.email_verified_at or not pending or pending.expires_at <= now():
+            raise HTTPException(400, 'Reset link is invalid or expired. Request a new one.')
+        user.password_hash, user.failed_logins, user.login_locked_until = password_hash(body.password), 0, None
+        db.execute(delete(SessionToken).where(SessionToken.user_id == user.id))
+        db.delete(pending); db.commit()
+        response.delete_cookie(settings.cookie_name,path='/',secure=settings.cookie_secure,httponly=True,samesite='lax')
+        return {'message':'Password updated. Sign in again; all previous sessions have been revoked.'}
 
     @app.get("/api/integrations/status", tags=["system"])
     def integrations(user=Depends(current_user)):
@@ -392,6 +495,7 @@ def create_app(settings=None):
         return {"items": [claim_record(c) for c in db.scalars(select(Claim).where(Claim.batch_id == batch_id))]}
 
     def claim_record(c):
+        if c is None: return None
         out = record(c); out.pop("image_path", None)
         out["image_url"] = f"/api/claims/{c.id}/image" if c.image_path else None
         return out
@@ -499,6 +603,7 @@ def create_app(settings=None):
         items = []
         for m in db.scalars(select(Match).where(Match.run_id == b.latest_run_id).order_by(Match.order_id)):
             out = record(m); out["order"] = record(db.get(Order, m.order_id))
+            if out["order"] is None: continue
             out["claim"] = claim_record(db.get(Claim, m.claim_id)) if m.claim_id else None
             out["candidates"] = [record(l) for l in db.scalars(select(StatementLine).where(StatementLine.id.in_(m.candidate_ids)))] if m.candidate_ids else []
             for candidate in out["candidates"]:
@@ -565,6 +670,21 @@ def create_app(settings=None):
     def events(batch_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user=Depends(current_user), db=Depends(get_db)):
         own_batch(db, batch_id, user)
         return {"items": [record(e) for e in db.scalars(select(AuditEvent).where(AuditEvent.batch_id == batch_id).order_by(AuditEvent.created_at.desc()).offset(offset).limit(limit))]}
+
+    @app.get('/workspace', include_in_schema=False)
+    def protected_workspace(request: Request, db=Depends(get_db)):
+        raw = request.cookies.get(settings.cookie_name, '')
+        session = db.get(SessionToken, token_digest(raw)) if raw else None
+        if not session or session.session_kind != 'cookie' or session.expires_at <= now():
+            return RedirectResponse('/login?next=/workspace', status_code=303)
+        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
+
+    @app.get('/login', include_in_schema=False)
+    @app.get('/signup', include_in_schema=False)
+    @app.get('/reset-password', include_in_schema=False)
+    @app.get('/guide', include_in_schema=False)
+    def browser_page():
+        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
 
     from fastapi.staticfiles import StaticFiles
     frontend=Path(__file__).resolve().parents[2]/"frontend"/"dist"

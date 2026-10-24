@@ -10,9 +10,13 @@ def flag(name, default=False):
 
 @dataclass
 class Settings:
+    app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
+    public_origin: str = field(default_factory=lambda: os.getenv("PUBLIC_ORIGIN", "http://127.0.0.1:8000"))
+    cookie_secure: bool = field(default_factory=lambda: flag("SESSION_COOKIE_SECURE", os.getenv("APP_ENV") == "production"))
+    remember_hours: int = 720
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///./data/milaan.db"))
     storage_dir: Path = field(default_factory=lambda: Path(os.getenv("STORAGE_DIR", "./data/uploads")))
-    cors_origins: list[str] = field(default_factory=lambda: [x.strip() for x in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000").split(",") if x.strip()])
+    cors_origins: list[str] = field(default_factory=lambda: [x.strip() for x in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://localhost:8080,http://127.0.0.1:8080").split(",") if x.strip()])
     run_worker: bool = field(default_factory=lambda: flag("RUN_WORKER_IN_API", True))
     registration_open: bool = field(default_factory=lambda: flag("ALLOW_REGISTRATION", True))
     enable_demo: bool = field(default_factory=lambda: flag("ENABLE_DEMO", True))
@@ -41,7 +45,22 @@ class Settings:
     demo_account_id: str = field(default_factory=lambda: os.getenv("DEMO_ACCOUNT_ID", "milaan-main"))
     testing: bool = False
 
+    @property
+    def cookie_name(self):
+        return "__Host-milaan_session" if self.cookie_secure else "milaan_session"
+
     def __post_init__(self):
+        from urllib.parse import urlparse
+        origin = urlparse(self.public_origin)
+        if origin.scheme not in {"http", "https"} or not origin.hostname or origin.username or origin.password or origin.query or origin.fragment or origin.path not in {"", "/"}:
+            raise ValueError("PUBLIC_ORIGIN must be an HTTP(S) origin without credentials, path or query")
+        self.public_origin = self.public_origin.rstrip("/")
+        if self.app_env not in {"development", "production"}:
+            raise ValueError("APP_ENV must be development or production")
+        if self.app_env == "production" and (not self.cookie_secure or origin.scheme != "https" or not self.require_email_verification):
+            raise ValueError("Production requires HTTPS PUBLIC_ORIGIN, secure cookies and email verification")
+        if self.app_env == "production" and (self.demo_seller_email or self.demo_seller_password):
+            raise ValueError("Demo operator provisioning is development-only")
         if self.smtp_security not in {"starttls", "ssl"}:
             raise ValueError("SMTP_SECURITY must be starttls or ssl")
         if self.extraction_provider not in {"manual", "gemini"}:

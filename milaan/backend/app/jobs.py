@@ -3,7 +3,7 @@ from .allocations import lock_seller, add_allocation
 from datetime import timedelta
 import threading, time, logging
 from sqlalchemy import select, delete
-from .models import Job, Batch, Claim, Order, Statement, StatementLine, Run, Match, Allocation, AuditEvent, SessionToken, now, uid
+from .models import Job, Batch, Claim, Order, Statement, StatementLine, Run, Match, Allocation, AuditEvent, SessionToken, PasswordReset, now, uid
 from .matcher import compute_matches, RULES_VERSION
 from .extraction import double_read, ExtractionUnavailable
 from .storage import image_path
@@ -123,6 +123,7 @@ def cleanup(database, settings):
             paths += list(db.scalars(select(Claim.image_path).where(Claim.batch_id == batch.id, Claim.image_path.is_not(None))))
             db.delete(batch)
         db.execute(delete(SessionToken).where(SessionToken.expires_at <= now()))
+        db.execute(delete(PasswordReset).where(PasswordReset.expires_at <= now(), PasswordReset.window_start < now()-timedelta(hours=1)))
     for path in paths: image_path(settings, path).unlink(missing_ok=True)
     # Reap crash-created orphan files only after a grace period.
     with database.sessions() as db: referenced = set(db.scalars(select(Claim.image_path).where(Claim.image_path.is_not(None))))
