@@ -22,7 +22,12 @@ def parse_time(value):
     return d.astimezone(timezone.utc).replace(tzinfo=None)
 
 def norm_ref(s): return re.sub(r"\s", "", str(s or "")).upper()
-def full_ref(s): return bool(s) and len(str(s).strip()) >= 5 and not re.search(r"[.*…•]|xx|masked|last\s*\d", str(s), re.I)
+def _identity_full_ref_v1(s): return bool(s) and len(str(s).strip()) >= 5 and not re.search(r"[.*…•]|xx|masked|last\s*\d", str(s), re.I)
+
+def full_ref(s):
+    # Formatting whitespace is not additional reference evidence.
+    return _identity_full_ref_v1(s) and len(norm_ref(s)) >= 5
+
 
 def csv_rows(raw, max_rows=2000):
     if len(raw) > 2_000_000: raise ValueError("CSV exceeds 2 MB")
@@ -56,7 +61,8 @@ def parse_orders(raw, max_rows=2000):
 def credit_identity(owner_id, account_id, ref, posted, amount, name):
     # Strong full references are account-scoped. Weak records get a conservative fingerprint.
     parts = [owner_id, account_id, norm_ref(ref)]
-    if not full_ref(ref): parts += [posted.isoformat(), str(amount), name.strip().upper()]
+    # Keep historical credit keys stable even as evidence-strength validation improves.
+    if not _identity_full_ref_v1(ref): parts += [posted.isoformat(), str(amount), name.strip().upper()]
     return hashlib.sha256(json.dumps(parts, ensure_ascii=False).encode()).hexdigest()
 
 def parse_statement(raw, owner_id, account_id, max_rows=2000):

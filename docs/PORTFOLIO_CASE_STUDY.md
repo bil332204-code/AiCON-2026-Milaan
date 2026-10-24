@@ -22,7 +22,7 @@ requires configuration and explicit consent, then review of extracted evidence.
 SHIP requires strict reference, amount, account, successful-status and coverage
 checks. HOLD indicates missing evidence within usable coverage. REVIEW exposes
 conflicts and uncertainty. Versioned human decisions preserve the machine result.
-Database uniqueness protects retained allocations across batches. Expiring sessions,
+Serialized allocation transactions and database constraints protect retained credit budgets across batches. Expiring sessions,
 ownership checks, image sanitization, CSV formula neutralization and configurable
 retention protect the working-data lifecycle.
 
@@ -70,3 +70,16 @@ filters complement reference/customer/order search. Playwright exercises complet
 saved workflows on desktop and mobile against temporary synthetic data, including
 human decisions, CSV export and logout. [Actual results and genuine screenshots](V2_MILESTONE_A.md)
 show the scope; advanced multi-credit allocation remains a separate milestone.
+
+
+## V2 milestone B: explicit payment shares
+
+Saved batches support reviewed partial, split and combined funding. The deterministic
+engine keeps these cases in REVIEW; humans explicitly associate receipt-linked source
+credits with per-order shares. Integer allocation amounts, per-seller transaction
+serialization, retained budget checks and idempotent grouped reviews prevent spending
+a source beyond its amount. Machine explanations remain separate from human decisions.
+A forward migration preserves whole allocations and guards against lossy rollback.
+Refund/reversal evidence and delayed or insufficient coverage remain review cases,
+not settlement assertions. [Evidence and genuine browser screenshots](V2_MILESTONE_B.md)
+record executed checks and the remaining operational limitations.

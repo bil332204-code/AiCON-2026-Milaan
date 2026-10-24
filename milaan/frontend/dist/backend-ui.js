@@ -1,3 +1,4 @@
+import {allocationDialog} from './allocation-ui.js';
 import {reviewImport} from './import-preview.js';
 import {MilaanAPI} from './milaan-api.js';
 import {mapRemote} from './remote-state.js';
@@ -167,7 +168,7 @@ export function createBackend(hooks) {
   }
   document.addEventListener('click',async event=>{
     const button=event.target.closest('button');if(!button)return;
-    if(!button.dataset.batchId&&!button.dataset.contentSave&&!button.dataset.saveClaim&&!button.dataset.removeStatement&&!['account','logout','server-sample','saved-batches','settings','refresh-batch','edit-inputs'].includes(button.dataset.action))return;
+    if(!button.dataset.batchId&&!button.dataset.contentSave&&!button.dataset.saveClaim&&!button.dataset.removeStatement&&!['allocation-plan','account','logout','server-sample','saved-batches','settings','refresh-batch','edit-inputs'].includes(button.dataset.action))return;
     event.preventDefault();event.stopImmediatePropagation();
     try{
       if(button.dataset.batchId)await guarded(async()=>{const b=await load(button.dataset.batchId,'results');showWorkspace(b.latest_run_id?'results':'imports');});
@@ -177,6 +178,7 @@ export function createBackend(hooks) {
         const updated=await api.saveContent(key,value,contentValues[key].version);contentValues[key]=updated;applyContent();toast('Content saved.');}
       else if(button.dataset.saveClaim)await saveClaim(button.dataset.saveClaim);
       else if(button.dataset.removeStatement)await guarded(async()=>{if(!await ensureEditable())return;const b=getState().remote;await api.deleteStatement(button.dataset.removeStatement,b.revision);await load(b.id,'imports');});
+      else if(button.dataset.action==='allocation-plan'){await guarded(async()=>{const state=getState();if(!state.remote||!state.results.length)throw Error('Load saved results first.');if(await allocationDialog(state,(body,key)=>api.reviewAllocations(state.remote.id,body,key))){await load(state.remote.id,'results');toast('Reviewed allocations saved. Partial funding stays in Review.');}});}
       else if(button.dataset.action==='logout'){if(working)throw Error('Wait for the current operation.');await api.logout();dispose();cache.clear();profile=null;contentValues=null;$('#review-dialog').close();$('#review-content').replaceChildren();$('#workspace-faq')?.replaceChildren();document.title='Milaan · Payment clarity';setState({...getState(),remote:null,orders:[],claims:[],lines:[],results:[],activity:[],view:'batches'});authenticate();render();}
       else if(button.dataset.action==='account')authenticate();
       else if(button.dataset.action==='server-sample')await serverDemo();

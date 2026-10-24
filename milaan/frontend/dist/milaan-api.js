@@ -59,6 +59,7 @@ export class MilaanAPI {
   uploadOrders(id, file, revision) { return this.upload(`/api/batches/${id}/orders`, file, { expected_revision: revision }); }
   uploadStatement(id, file, revision, metadata) { return this.upload(`/api/batches/${id}/statement`, file, { ...metadata, expected_revision: revision }); }
   uploadClaim(id, orderId, file, revision) { return this.upload(`/api/batches/${id}/claims`, file, { order_id: orderId, expected_revision: revision }); }
+  reviewAllocations(id, body, key) { return this.request(`/api/batches/${id}/allocation-review`, {method:'POST',body,headers:{'Idempotency-Key':key}}); }
   updateClaim(id, version, fields, confirmed = false) { return this.request(`/api/claims/${id}`, { method: 'PATCH', body: { expected_version: version, fields, confirmed } }); }
   retryExtraction(id, version) { return this.request(`/api/claims/${id}/retry-extraction`, { method: 'POST', body: { expected_version: version } }); }
   deleteClaim(id, version) { return this.request(`/api/claims/${id}?expected_version=${version}`, { method: 'DELETE' }); }

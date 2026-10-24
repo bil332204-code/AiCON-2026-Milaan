@@ -30,3 +30,14 @@ test('only recognized successful payment statuses can automatically ship',()=>{
 test('CSV limit measures UTF-8 bytes rather than character count',()=>{
   assert.throws(()=>parseCSV('name\n'+'ع'.repeat(1_000_000)),/2 MB/);
 });
+
+test('a same-reference debit prevents automatic and manual shipping until resolved',()=>{
+  const data=demoData();data.lines.push({...data.lines[0],id:'refund',direction:'DEBIT'});
+  const results=reconcile(data);assert.equal(results[0].code,'REVERSAL');assert.equal(results[0].status,'review');
+  assert.throws(()=>decide(results,results[0].id,'ship',data.lines[0].id,'Override unresolved reversal'),/reversal/);
+});
+
+test('formatting whitespace cannot promote a short reference into full evidence',()=>{
+  assert.equal(fullRef('A B C'),false);
+  const d=demoData();d.claims[0].ref='A B C';d.lines[0].ref='ABC';assert.equal(reconcile(d)[0].status,'review');
+});

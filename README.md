@@ -80,7 +80,9 @@ Python 3.13 and Windows execution remain unverified.
 
 [Milestone A](docs/V2_MILESTONE_A.md) adds reviewed CSV mapping, private import
 provenance, discrepancy filters and desktop/mobile browser tests with genuine
-synthetic screenshots. Advanced allocation remains a separate milestone.
+synthetic screenshots. Saved-backend split/combined/partial allocation is implemented in
+[Milestone B](docs/V2_MILESTONE_B.md), with explicit human confirmation, retained
+credit budgets, a forward migration and additional browser tests.
 
 ## Verification
 

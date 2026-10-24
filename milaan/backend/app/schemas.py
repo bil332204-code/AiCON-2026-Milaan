@@ -137,3 +137,20 @@ class ImportProvenance(Strict):
         if any(k not in allowed or len(v) > 200 for k, v in value.items()):
             raise ValueError("Unsupported import mapping")
         return value
+
+
+class AllocationPart(Strict):
+    statement_line_id: str = Field(min_length=1, max_length=36)
+    claim_id: str = Field(min_length=1, max_length=36)
+    amount_pkr: str = Field(min_length=1, max_length=30)
+
+class AllocationOrder(Strict):
+    match_id: str = Field(min_length=1, max_length=36)
+    expected_version: int = Field(ge=1)
+    parts: list[AllocationPart] = Field(max_length=20)
+
+class AllocationPlan(Strict):
+    expected_revision: int = Field(ge=1)
+    orders: list[AllocationOrder] = Field(min_length=1, max_length=100)
+    reason: str = Field(min_length=5, max_length=1000)
+    confirmed_relationships: bool = False

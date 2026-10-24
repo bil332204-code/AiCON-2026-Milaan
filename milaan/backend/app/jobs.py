@@ -1,3 +1,4 @@
+from .allocations import lock_seller, add_allocation
 """Database-backed queue; API thread or the standalone worker can consume jobs."""
 from datetime import timedelta
 import threading, time, logging
@@ -86,6 +87,7 @@ def process_job(database, settings, job_id, lease):
             claims = list(db.scalars(select(Claim).where(Claim.batch_id == batch_id)))
             statements = list(db.scalars(select(Statement).where(Statement.batch_id == batch_id)))
             lines = list(db.scalars(select(StatementLine).where(StatementLine.batch_id == batch_id)))
+            lock_seller(db, batch.owner_id)
             used = set(db.scalars(select(Allocation.credit_key).where(Allocation.owner_id == batch.owner_id)))
             computed = compute_matches(orders, claims, statements, lines, used)
             run = Run(batch_id=batch_id, input_revision=job.input_revision, rules_version=RULES_VERSION)
@@ -96,8 +98,8 @@ def process_job(database, settings, job_id, lease):
                 db.add(match); db.flush()
                 if match.final_status == "ship":
                     line = lookup[match.selected_line_id]
-                    db.add(Allocation(owner_id=batch.owner_id, batch_id=batch_id, match_id=match.id, order_id=match.order_id,
-                                      claim_id=match.claim_id, statement_line_id=line.id, credit_key=line.credit_key))
+                    add_allocation(db, owner_id=batch.owner_id, batch_id=batch_id, match_id=match.id, order_id=match.order_id,
+                                   claim_id=match.claim_id, line=line, amount=line.amount_paisa)
             batch.latest_run_id = run.id
             job.status, job.progress, job.total, job.updated_at = "done", len(orders), len(orders), now()
             audit(db, batch_id, batch.owner_id, "reconciled", {"run_id": run.id, "orders": len(orders), "rules_version": RULES_VERSION})

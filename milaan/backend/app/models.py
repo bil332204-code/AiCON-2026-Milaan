@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import uuid
-from sqlalchemy import String, Text, Integer, BigInteger, Boolean, DateTime, ForeignKey, UniqueConstraint, JSON
+from sqlalchemy import String, Text, Integer, BigInteger, Boolean, DateTime, ForeignKey, UniqueConstraint, CheckConstraint, JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 def uid(): return str(uuid.uuid4())
@@ -137,14 +137,26 @@ class Match(Base):
 
 class Allocation(Base):
     __tablename__ = "allocations"
+    __table_args__ = (UniqueConstraint("match_id", "credit_key", name="uq_allocation_match_credit"),
+                      CheckConstraint("amount_paisa > 0", name="ck_allocation_positive"))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     batch_id: Mapped[str] = mapped_column(ForeignKey("batches.id", ondelete="CASCADE"), index=True)
-    match_id: Mapped[str] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"), unique=True)
-    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), unique=True)
-    claim_id: Mapped[str] = mapped_column(ForeignKey("claims.id", ondelete="CASCADE"), unique=True)
-    credit_key: Mapped[str] = mapped_column(String(64), unique=True)
+    match_id: Mapped[str] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"))
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    claim_id: Mapped[str] = mapped_column(ForeignKey("claims.id", ondelete="CASCADE"))
+    credit_key: Mapped[str] = mapped_column(String(64), index=True)
     statement_line_id: Mapped[str] = mapped_column(ForeignKey("statement_lines.id", ondelete="CASCADE"))
+    amount_paisa: Mapped[int] = mapped_column(BigInteger)
+
+class AllocationReview(Base):
+    __tablename__ = "allocation_reviews"
+    __table_args__ = (UniqueConstraint("batch_id", "idempotency_key", name="uq_allocation_review_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    batch_id: Mapped[str] = mapped_column(ForeignKey("batches.id", ondelete="CASCADE"), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    request_digest: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict] = mapped_column(JSON)
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"

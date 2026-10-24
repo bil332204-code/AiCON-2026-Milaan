@@ -14,7 +14,7 @@ export function mapRemote(batch, orders, claims, statements, lines, results, eve
     text:c.read_a||c.read_b?JSON.stringify({first_read:c.read_a,second_read:c.read_b,status:c.extraction_status,error:c.extraction_error},null,2):'',
     ocrStatus:c.extraction_status==='pending'?'Read with AI':c.extraction_status.replaceAll('_',' '),extractionStatus:c.extraction_status,hasImage:!!c.image_url,url:null}));
   const claimLookup=new Map(mappedClaims.map(c=>[c.id,c]));
-  const mapLine=l=>({id:l.id,name:l.counterparty,amount:l.amount_paisa,ref:l.transaction_id,time:Date.parse(l.posted_at),account:l.account_id,available:l.available});
+  const mapLine=l=>({id:l.id,name:l.counterparty,amount:l.amount_paisa,ref:l.transaction_id,time:Date.parse(l.posted_at),account:l.account_id,direction:l.direction,currency:l.currency,unallocated:l.unallocated_paisa,available:l.available});
   const statementAccount=mappedOrders.find(o=>!statements.some(s=>s.account_id===o.account))?.account||statements[0]?.account_id||mappedOrders[0]?.account||'';
   const first=statements.find(s=>s.account_id===statementAccount);
   return {remote:batch,orders:mappedOrders,claims:mappedClaims,lines:lines.map(mapLine),statements,statementAccount,
@@ -22,6 +22,6 @@ export function mapRemote(batch, orders, claims, statements, lines, results, eve
     coverage:{start:localTime(first?.coverage_start),end:localTime(first?.coverage_end),complete:first?.complete||false},referenceVerified:first?.references_verified||false,
     results:results.map(r=>({id:orderLookup.get(r.order_id)?.id||r.order.order_ref.replace(/^#/,''),order:orderLookup.get(r.order_id),claim:claimLookup.get(r.claim_id),
       status:r.final_status,machine:r.machine_verdict,code:r.reason_code,reason:r.reason,candidates:r.candidates.map(mapLine),allocated:r.selected_line_id,
-      matchId:r.id,version:r.version,evidence:r.evidence,decision:r.reviewer_reason?{reason:r.reviewer_reason}:null})),
+      allocations:r.allocations||[],paid:r.allocated_paisa||0,outstanding:r.outstanding_paisa??r.order.amount_due_paisa,matchId:r.id,version:r.version,evidence:r.evidence,decision:r.reviewer_reason?{reason:r.reviewer_reason}:null})),
     activity:events.map(e=>({title:e.action.replaceAll('_',' '),detail:JSON.stringify(e.detail),at:Date.parse(e.created_at)}))};
 }

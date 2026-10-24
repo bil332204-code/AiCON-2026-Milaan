@@ -49,3 +49,31 @@ def test_missing_or_ambiguous_status_cannot_ship(status):
     result=compute_matches([o],[c],[s],[l],set())[0]
     assert result['final_status']=='review'
     assert result['reason_code']=='STATUS_CONFLICT'
+
+
+def test_refund_debit_or_reversed_status_prevents_automatic_ship():
+    o,c,s,l=fixtures()
+    debit=NS(**{**vars(l),'id':'refund','direction':'DEBIT'})
+    result=compute_matches([o],[c],[s],[l,debit],set())[0]
+    assert result['reason_code']=='REVERSAL' and result['final_status']=='review'
+    c.fields['status_text']='Payment reversed'
+    assert compute_matches([o],[c],[s],[l],set())[0]['reason_code']=='REVERSAL'
+
+
+def test_delayed_posting_is_a_conflict_not_automatic_settlement():
+    from datetime import timedelta
+    o,c,s,l=fixtures();l.posted_at+=timedelta(hours=25)
+    result=compute_matches([o],[c],[s],[l],set())[0]
+    assert result['reason_code']=='DATE_CONFLICT' and result['final_status']=='review'
+    assert 'delayed' in result['reason']
+
+
+def test_whitespace_cannot_promote_a_short_reference_to_full_evidence():
+    assert not full_ref('A B C')
+    # Strengthening matching must not change retained financial source identities.
+    import hashlib, json
+    from app.parsing import credit_identity
+    expected=hashlib.sha256(json.dumps(['owner','wallet','ABC'],ensure_ascii=False).encode()).hexdigest()
+    assert credit_identity('owner','wallet','A B C',parse_time('2026-10-09T14:00'),10000,'Synthetic')==expected
+    o,c,s,l=fixtures();c.fields['transaction_id']='A B C';l.transaction_id='ABC'
+    assert compute_matches([o],[c],[s],[l],set())[0]['final_status']=='review'

@@ -1,3 +1,5 @@
+from .allocations import lock_seller, remaining_credit, add_allocation
+from .allocation_review import review_allocations
 from contextlib import asynccontextmanager
 from datetime import timedelta, datetime, timezone
 from pathlib import Path
@@ -12,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .database import Database
 from .models import PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
-from .schemas import ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
+from .schemas import AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
 from .emailer import send_verification
 from .security import password_hash, verify_password, issue_session, token_digest
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
@@ -368,7 +370,13 @@ def create_app(settings=None):
         s = db.get(Statement, statement_id)
         if not s: raise HTTPException(404, "Statement not found")
         own_batch(db, s.batch_id, user)
-        return {"items": [record(l) for l in db.scalars(select(StatementLine).where(StatementLine.statement_id == s.id).order_by(StatementLine.posted_at).offset(offset).limit(limit))]}
+        items = []
+        for line in db.scalars(select(StatementLine).where(StatementLine.statement_id == s.id).order_by(StatementLine.posted_at).offset(offset).limit(limit)):
+            out = record(line)
+            used = db.scalar(select(func.coalesce(func.sum(Allocation.amount_paisa), 0)).where(Allocation.credit_key == line.credit_key))
+            out["unallocated_paisa"] = max(0, line.amount_paisa-used) if line.direction == "CREDIT" else 0
+            items.append(out)
+        return {"items": items}
 
     @app.delete("/api/statements/{statement_id}", tags=["statements"])
     def delete_statement(statement_id: str, expected_revision: int = Query(...), user=Depends(current_user), db=Depends(get_db)):
@@ -494,8 +502,12 @@ def create_app(settings=None):
             out["claim"] = claim_record(db.get(Claim, m.claim_id)) if m.claim_id else None
             out["candidates"] = [record(l) for l in db.scalars(select(StatementLine).where(StatementLine.id.in_(m.candidate_ids)))] if m.candidate_ids else []
             for candidate in out["candidates"]:
-                alloc = db.scalar(select(Allocation).where(Allocation.credit_key == candidate["credit_key"]))
-                candidate["available"] = not alloc or alloc.match_id == m.id
+                used = db.scalar(select(func.coalesce(func.sum(Allocation.amount_paisa), 0)).where(Allocation.credit_key == candidate["credit_key"], Allocation.match_id != m.id))
+                candidate["remaining_paisa"] = max(0, candidate["amount_paisa"] - used)
+                candidate["available"] = candidate["remaining_paisa"] >= out["order"]["amount_due_paisa"]
+            out["allocations"] = [record(a) for a in db.scalars(select(Allocation).where(Allocation.match_id == m.id))]
+            out["allocated_paisa"] = sum(a["amount_paisa"] for a in out["allocations"])
+            out["outstanding_paisa"] = max(0, out["order"]["amount_due_paisa"] - out["allocated_paisa"])
             items.append(out)
         return items
 
@@ -503,6 +515,11 @@ def create_app(settings=None):
     def results(batch_id: str, user=Depends(current_user), db=Depends(get_db)):
         b = own_batch(db, batch_id, user); items = get_results(db, b)
         return {"batch": record(b), "items": items, "summary": {"orders": len(items), **{s: sum(r["final_status"] == s for r in items) for s in ["ship", "hold", "review"]}}}
+
+    @app.post("/api/batches/{batch_id}/allocation-review", tags=["results"])
+    def allocation_plan(batch_id: str, body: AllocationPlan, idempotency_key: str = Header(...), user=Depends(current_user), db=Depends(get_db)):
+        batch = own_batch(db, batch_id, user, True)
+        return review_allocations(db, batch, user, body, idempotency_key)
 
     @app.post("/api/matches/{match_id}/decision", tags=["results"])
     def decision(match_id: str, body: Decision, user=Depends(current_user), db=Depends(get_db)):
@@ -513,10 +530,12 @@ def create_app(settings=None):
         db.refresh(m)
         if m.run_id != b.latest_run_id or m.version != body.expected_version: raise HTTPException(409, "Result is stale. Reload current results.")
         order = db.get(Order, m.order_id)
+        lock_seller(db, user.id)
         chosen = None
         if body.decision == "ship":
             if not m.claim_id: raise HTTPException(422, "There is no uniquely linked claim")
             if m.reason_code == "DUPLICATE_CREDIT": raise HTTPException(409, "Correct the duplicate source statement first")
+            if m.reason_code == "REVERSAL": raise HTTPException(409, "Resolve refund or reversal evidence before shipping")
             if body.statement_line_id not in m.candidate_ids: raise HTTPException(422, "Select a candidate statement credit")
             chosen = db.get(StatementLine, body.statement_line_id)
             if not chosen or chosen.batch_id != b.id or chosen.account_id != order.account_id or chosen.amount_paisa != order.amount_due_paisa or chosen.direction != "CREDIT":
@@ -525,7 +544,8 @@ def create_app(settings=None):
             if used: raise HTTPException(409, "This credit is already assigned")
         db.execute(delete(Allocation).where(Allocation.match_id == m.id)); db.flush()
         if chosen:
-            db.add(Allocation(owner_id=user.id, batch_id=b.id, match_id=m.id, order_id=m.order_id, claim_id=m.claim_id, credit_key=chosen.credit_key, statement_line_id=chosen.id))
+            add_allocation(db, owner_id=user.id, batch_id=b.id, match_id=m.id, order_id=m.order_id, claim_id=m.claim_id, line=chosen, amount=chosen.amount_paisa)
+        m.evidence = [e for e in m.evidence if e.get("check") != "reviewed_allocation"]
         previous = m.final_status
         m.final_status, m.selected_line_id, m.reviewer_reason, m.version = body.decision, chosen.id if chosen else None, body.reason, m.version + 1
         audit(db, b.id, user.id, "review_decision", {"match_id": m.id, "previous": previous, "decision": body.decision, "reason": body.reason, "version": m.version})
@@ -535,8 +555,10 @@ def create_app(settings=None):
     def export(batch_id: str, user=Depends(current_user), db=Depends(get_db)):
         b = own_batch(db, batch_id, user); rows = get_results(db, b)
         if not rows: raise HTTPException(409, "Run reconciliation first")
-        data = csv_export(["order_ref", "customer_name", "amount_pkr", "final_status", "machine_verdict", "reason", "reviewer_reason", "statement_line_id", "sample_data"],
-                          [[r["order"]["order_ref"], r["order"]["customer_name"], f'{r["order"]["amount_due_paisa"]/100:.2f}', r["final_status"], r["machine_verdict"], r["reason"], r["reviewer_reason"], r["selected_line_id"], b.is_demo] for r in rows])
+        data = csv_export(["order_ref", "customer_name", "amount_pkr", "final_status", "machine_verdict", "reason", "reviewer_reason", "statement_line_id", "sample_data", "allocated_pkr", "outstanding_pkr", "allocation_parts"],
+                          [[r["order"]["order_ref"], r["order"]["customer_name"], f'{r["order"]["amount_due_paisa"]/100:.2f}', r["final_status"], r["machine_verdict"], r["reason"], r["reviewer_reason"], r["selected_line_id"], b.is_demo,
+                            f'{r["allocated_paisa"]/100:.2f}', f'{r["outstanding_paisa"]/100:.2f}',
+                            json.dumps([{"statement_line_id": a["statement_line_id"], "amount_paisa": a["amount_paisa"], "claim_id": a["claim_id"]} for a in r["allocations"]])] for r in rows])
         return Response(data, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="milaan-{b.id}.csv"'})
 
     @app.get("/api/batches/{batch_id}/audit", tags=["audit"])

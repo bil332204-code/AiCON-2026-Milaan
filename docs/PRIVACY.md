@@ -29,3 +29,11 @@ Never commit `.env`, upload directories, databases or exported financial records
 Audit review reasons can contain sensitive text; restrict database access.
 The external hosted workspace's privacy and retention have not been independently
 validated here; consult its current guide before supplying real information.
+
+
+V2 reviewed allocations reserve explicit integer-paisa shares across retained records.
+Private audit history includes reviewer reasons and exact source shares. Idempotency
+records contain private response snapshots and expire/delete with their batch.
+Partial funding may remain in REVIEW while its credit shares stay reserved. Legacy
+HOLD/REVIEW, reset, deletion and expiry release reservations; no refund is sent.
+See [Milestone B](V2_MILESTONE_B.md) for budget protection and migration requirements.
