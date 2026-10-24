@@ -28,3 +28,11 @@ in this release pass. SQLite is the verified single-machine development path.
 The separately hosted Sites workspace has no verified shared database, source,
 synchronization or deployment pipeline with this checkout. Repository changes do
 not deploy it. Its internal architecture and retention remain unverified.
+
+
+V2 adds `app/allocation_review.py` for atomic human-confirmed payment shares and
+`app/allocations.py` for serialized retained-credit budget checks. The worker and
+both decision APIs use the same seller lock protocol. Live allocation rows hold
+integer-paisa amounts; private `allocation_reviews` records provide idempotent retry
+snapshots. No separate bank connection or shared hosted database was introduced.
+See [payment allocation design](V2_MILESTONE_B.md).
