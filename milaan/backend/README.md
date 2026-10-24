@@ -1,3 +1,5 @@
+> Inherited component reference. For this repository, follow [canonical local setup](../../README_FIRST.md); root instructions take precedence. Hosted features are separately maintained and unverified here.
+
 > October 10 update: read UPDATE_GUIDE.md first. New signups now require email verification and SMTP configuration by default. Existing accounts remain usable.
 
 # Milaan backend

@@ -1,13 +1,13 @@
 # Milaan + separate demo store
 
-**Start here.** These root instructions replace older setup instructions inside the inherited folders.
+**Canonical local setup entry point.** These root instructions replace older setup instructions inside the inherited folders.
 
 Milaan is the receipt / statement checker. The demo shop is a separate app, database and process. It sends orders and evidence through authenticated Milaan APIs. No payment gateway is connected and no money is charged.
 
 ## Windows: first run
 
 1. Extract this ZIP to a **new folder**. Keep your existing project as a backup. Stop your old servers if they use port 8000 or 8090.
-2. Double-click **SETUP.bat**. Internet is required to install Python packages. It tries Python 3.13 first, otherwise your `python` command. It creates a fresh `.venv`; do not copy your old one.
+2. Double-click **SETUP.bat**. Internet is required to install Python packages. It tries Python 3.12 first, otherwise your `python` command. It creates a fresh `.venv`; do not copy your old one.
 3. Enter your operator email and a new password of at least 10 characters. Remember these; use the same credentials in both apps. This privately configured demo operator can sign in without SMTP. Public new signups still use email verification.
 4. Double-click **START_DEMO.bat**. Keep both terminal windows open. Wait for both to say `Application startup complete`.
 5. Open **http://127.0.0.1:8000** for Milaan and **http://127.0.0.1:8090** for the separate demo store.
@@ -16,7 +16,7 @@ Milaan is the receipt / statement checker. The demo shop is a separate app, data
 
 After the first setup, only run START_DEMO.bat. To stop, press Ctrl+C in both server windows.
 
-**Python:** API tests were run on Python 3.12.14 on Linux. Python 3.13 is targeted by the Windows setup but has not been executed here; Windows launch scripts have also not been executed here. If package installation fails on 3.13, use Python 3.12 to create `.venv`, then rerun SETUP.bat.
+**Python:** API tests were run on Python 3.12.14 on Linux. Python 3.13 is targeted by the Windows setup but has not been executed here; Windows launch scripts have also not been executed here. Prefer Python 3.12 to create `.venv`, then rerun SETUP.bat.
 
 ## Gemini (optional receipt reading)
 
@@ -61,3 +61,30 @@ cd demo-store
 - `INTEGRATION_REPORT.md`: verified scope and remaining limitations.
 
 No Node build or third frontend server is needed. Keep `.env` private. This kit starts with new local data; it does not migrate your old business database automatically.
+
+## Troubleshooting and verification scope
+
+Run all root commands from the cloned repository, not the inherited backend folder.
+Python 3.12 virtual environment creation, pinned installation, SQLite migrations,
+both application launches and synthetic HTTP workflows were executed on Linux.
+The interactive operator prompt, Windows batch files and Python 3.13 were not
+executed in this release pass. Automated operator startup and login use isolated
+synthetic test credentials, never a shared account for ongoing use.
+
+If a command reports a missing module, use the root `.venv/bin/python` explicitly
+and reinstall `milaan/backend/requirements.txt`; do not mix system and venv Python.
+If a port is occupied, inspect the existing process and stop your earlier instance
+with Ctrl+C, or use another port. Never kill an unknown process. When changing the
+backend port, set `MILAAN_URL` for the demo-store process and the frontend Backend
+address to the same URL. Uvicorn fails with a bind error for occupied ports.
+
+For isolated loopback development without an operator or SMTP, launch Milaan with
+`REQUIRE_EMAIL_VERIFICATION=false` before the uvicorn command and register your own
+account. This is an explicit development-only override; keep verification enabled
+for public deployments. Do not invent or commit credentials. Services must restart
+after a cloud snapshot restores; installed dependencies and data persist separately.
+
+Before migrating existing data, back up the database and uploads together. See
+[privacy](docs/PRIVACY.md), [import contracts](docs/IMPORT_CONTRACTS.md) and
+[release validation](docs/RELEASE_REPORT.md). Nested guides are historical/reference
+material where they differ from this guide.

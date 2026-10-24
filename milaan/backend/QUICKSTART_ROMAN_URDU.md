@@ -1,3 +1,5 @@
+> Inherited component reference. For this repository, follow [canonical local setup](../../README_FIRST.md); root instructions take precedence. Hosted features are separately maintained and unverified here.
+
 # Bilal, simple tareeqa
 
 Yeh Milaan ka actual backend hai. Isme user accounts, database, screenshot upload, AI reader ka connection, payment matching, review aur CSV download ka code hai.
