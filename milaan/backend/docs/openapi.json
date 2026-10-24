@@ -1533,6 +1533,70 @@
         }
       }
     },
+    "/api/batches/{batch_id}/allocation-review": {
+      "post": {
+        "tags": [
+          "results"
+        ],
+        "summary": "Allocation Plan",
+        "operationId": "allocation_plan_api_batches__batch_id__allocation_review_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationPlan"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{match_id}/decision": {
       "post": {
         "tags": [
@@ -1704,6 +1768,104 @@
   },
   "components": {
     "schemas": {
+      "AllocationOrder": {
+        "properties": {
+          "match_id": {
+            "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Match Id"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationPart"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Parts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "match_id",
+          "expected_version",
+          "parts"
+        ],
+        "title": "AllocationOrder"
+      },
+      "AllocationPart": {
+        "properties": {
+          "statement_line_id": {
+            "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Statement Line Id"
+          },
+          "claim_id": {
+            "type": "string",
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Claim Id"
+          },
+          "amount_pkr": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Amount Pkr"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "statement_line_id",
+          "claim_id",
+          "amount_pkr"
+        ],
+        "title": "AllocationPart"
+      },
+      "AllocationPlan": {
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Revision"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationOrder"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Orders"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 5,
+            "title": "Reason"
+          },
+          "confirmed_relationships": {
+            "type": "boolean",
+            "title": "Confirmed Relationships",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expected_revision",
+          "orders",
+          "reason"
+        ],
+        "title": "AllocationPlan"
+      },
       "BatchCreate": {
         "properties": {
           "name": {
