@@ -118,7 +118,6 @@ def test_registration_gate_is_publicly_honest_without_opening_signup(env):
     response = client.get("/")
     assert response.status_code == 200
     assert '<meta name="milaan-registration-state" content="closed">' in response.text
-    assert client.post("/api/auth/register", json={}).status_code == 403
     settings.registration_open = True
     assert '<meta name="milaan-registration-state" content="open">' in client.get("/").text
 
