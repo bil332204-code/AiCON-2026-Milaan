@@ -16,7 +16,7 @@ from .config import Settings
 from .database import Database
 from .models import PasswordReset, PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
 from .schemas import ResetRequest, ResetPassword, AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
-from .emailer import send_verification, send_password_reset
+from .emailer import EmailDeliveryError, send_verification, send_password_reset
 from .security import password_hash, verify_password, issue_session, token_digest, csrf_token
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
 from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
@@ -324,8 +324,14 @@ def create_app(settings=None):
         pending.token_hash, pending.expires_at, pending.last_sent_at = token_digest(raw), now()+timedelta(minutes=15), now()
         pending.send_count += 1
         try: send_password_reset(settings, user.email, raw)
+        except EmailDeliveryError as exc:
+            # Fixed categories / status codes only. Do not log PII, provider errors or reset tokens.
+            logging.getLogger('milaan.auth').warning(
+                'Password recovery email delivery failed (reason=%s, provider_status=%s)',
+                exc.category, exc.provider_status)
         except Exception:
-            logging.getLogger('milaan.auth').warning('Password recovery email delivery failed; check transactional email configuration')
+            logging.getLogger('milaan.auth').warning(
+                'Password recovery email delivery failed (reason=unexpected)')
         db.commit()
         return message
 
