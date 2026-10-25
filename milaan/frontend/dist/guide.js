@@ -30,12 +30,9 @@ document.addEventListener('keydown', event => {
     modal.focus();
     return;
   }
-  const first = focusable[0], last = focusable.at(-1), active = document.activeElement;
-  if (event.shiftKey && (active === first || !modal.contains(active))) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && (active === last || !modal.contains(active))) {
-    event.preventDefault();
-    first.focus();
-  }
+  const current = focusable.indexOf(document.activeElement);
+  const next = current < 0 ? (event.shiftKey ? focusable.length - 1 : 0)
+    : (current + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+  event.preventDefault();
+  focusable[next].focus();
 }, true);
