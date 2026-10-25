@@ -113,3 +113,10 @@ def test_full_reference_amount_only_ships_with_all_safety_checks():
     assert (result['final_status'], result['reason_code']) == ('ship', 'EXACT_MATCH')
     claim.fields_checked = False
     assert compute_matches([order], [claim], [statement], [credit], set())[0]['final_status'] == 'review'
+
+
+def test_payment_sent_is_not_successful_without_explicit_provider_confirmation():
+    order, claim, statement, credit = fixtures()
+    claim.fields['status_text'] = 'Payment sent'
+    result = compute_matches([order],[claim],[statement],[credit],set())[0]
+    assert (result['final_status'],result['reason_code']) == ('review','STATUS_CONFLICT')
