@@ -702,6 +702,15 @@ def create_app(settings=None):
             return RedirectResponse('/login?next=/workspace', status_code=303)
         return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
 
+    @app.get('/privacy', include_in_schema=False)
+    @app.get('/terms', include_in_schema=False)
+    @app.get('/about', include_in_schema=False)
+    def legal_page(request: Request):
+        # Only this fixed allowlist can map to a public document, never arbitrary file paths.
+        names = {'/privacy': 'privacy.html', '/terms': 'terms.html', '/about': 'about.html'}
+        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist'/names[request.url.path],
+                            media_type='text/html')
+
     @app.get('/login', include_in_schema=False)
     @app.get('/signup', include_in_schema=False)
     @app.get('/reset-password', include_in_schema=False)
