@@ -260,3 +260,14 @@ class PasswordReset(Base):
     last_sent_at: Mapped[datetime] = mapped_column(DateTime)
     window_start: Mapped[datetime] = mapped_column(DateTime)
     send_count: Mapped[int] = mapped_column(Integer)
+
+
+class ReceiptDeletion(Base):
+    """Independent of claims/batches so cascades cannot erase deletion retries."""
+    __tablename__ = "receipt_deletions"
+    __table_args__ = (UniqueConstraint("storage_identity", "object_key", name="uq_receipt_deletion_object"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    object_key: Mapped[str] = mapped_column(String(100))
+    storage_identity: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)

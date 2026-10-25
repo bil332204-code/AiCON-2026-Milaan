@@ -34,3 +34,14 @@ typing_extensions==4.16.0
 tzdata==2026.5
 Unidecode==1.4.0
 uvicorn==0.54.0
+
+# PostgreSQL and S3 client dependency resolution.
+boto3==1.40.61
+botocore==1.40.76
+jmespath==1.1.0
+psycopg==3.2.13
+psycopg-binary==3.2.13
+python-dateutil==2.9.0.post0
+s3transfer==0.14.0
+six==1.17.0
+urllib3==2.8.0

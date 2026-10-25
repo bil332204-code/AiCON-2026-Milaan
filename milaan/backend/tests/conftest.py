@@ -1,4 +1,9 @@
 import io
+import os
+import uuid
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from app.storage import receipt_storage
 import pytest
 from PIL import Image
 from fastapi.testclient import TestClient
@@ -8,12 +13,26 @@ from app.models import Base
 
 @pytest.fixture
 def env(tmp_path):
-    settings = Settings(app_env="development", cookie_secure=False, demo_seller_email="", demo_seller_password="", database_url=f"sqlite:///{tmp_path}/test.db", storage_dir=tmp_path/"uploads", run_worker=False, testing=True, require_email_verification=False,
+    schema = None
+    target = os.getenv('MILAAN_INTEGRATION_DATABASE_URL')
+    if target:
+        schema = 'synthetic_' + uuid.uuid4().hex
+        admin = create_engine(target)
+        with admin.begin() as connection: connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+        target = make_url(target).update_query_dict({'options': '-csearch_path=' + schema}).render_as_string(hide_password=False)
+    settings = Settings(app_env="development", cookie_secure=False, demo_seller_email="", demo_seller_password="", database_url=target or f"sqlite:///{tmp_path}/test.db", migration_database_url="", storage_backend="s3" if target else "local", s3_prefix="synthetic/"+uuid.uuid4().hex+"/", registration_open=True, storage_dir=tmp_path/"uploads", run_worker=False, testing=True, require_email_verification=False,
                         extraction_provider="manual", gemini_key="", gemini_model="")
     app = create_app(settings)
     Base.metadata.create_all(app.state.database.engine)
-    with TestClient(app) as client:
-        yield client, app.state.database, settings
+    try:
+        with TestClient(app) as client:
+            yield client, app.state.database, settings
+    finally:
+        if schema:
+            storage = receipt_storage(settings)
+            for key, _ in storage.objects(): storage.delete(key)
+            with admin.begin() as connection: connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+            admin.dispose()
 
 def register(client, email="seller@example.com"):
     response = client.post("/api/auth/register", json={"email": email, "password": "safe-test-password", "display_name": "Test Seller"})

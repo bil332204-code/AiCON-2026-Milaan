@@ -1,5 +1,9 @@
 # Deploying the integrated Milaan alternative
 
+> Production storage update: the SQLite/local-disk production path below is superseded
+> by [Render + Neon readiness](RENDER_NEON_READINESS.md). Production now requires
+> PostgreSQL and HTTPS private S3. Local SQLite remains supported for development.
+
 This is a prepared path for a **separate, approved deployment**. It does not update
 the existing Sites website. Do not change its DNS, identity provider or data until
 [V3 identity migration](V3_IDENTITY_MIGRATION.md) is proven and approved.

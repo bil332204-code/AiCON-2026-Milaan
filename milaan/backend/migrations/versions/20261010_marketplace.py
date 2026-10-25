@@ -16,7 +16,7 @@ depends_on = None
 def upgrade() -> None:
     # 1. Add is_admin to users
     with op.batch_alter_table("users") as batch_op:
-        batch_op.add_column(sa.Column("is_admin", sa.Boolean(), server_default=sa.text("0"), nullable=False))
+        batch_op.add_column(sa.Column("is_admin", sa.Boolean(), server_default=sa.false(), nullable=False))
 
     # 2. Create products table
     op.create_table(
@@ -30,7 +30,7 @@ def upgrade() -> None:
         sa.Column("selling_price_paisa", sa.BigInteger(), nullable=False),
         sa.Column("stock_quantity", sa.Integer(), server_default="0", nullable=False),
         sa.Column("low_stock_threshold", sa.Integer(), server_default="5", nullable=False),
-        sa.Column("is_active", sa.Boolean(), server_default="1", nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("image_url", sa.String(500), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
