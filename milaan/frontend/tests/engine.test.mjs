@@ -41,3 +41,12 @@ test('formatting whitespace cannot promote a short reference into full evidence'
   assert.equal(fullRef('A B C'),false);
   const d=demoData();d.claims[0].ref='A B C';d.lines[0].ref='ABC';assert.equal(reconcile(d)[0].status,'review');
 });
+
+test('CSV cells starting with tab, carriage return or spreadsheet formula characters are escaped',()=>{
+  for(const prefix of ['=', '+', '-', '@', '\t', '\r', ' \t=']){
+    const fixture=reconcile(demoData());
+    fixture[0].order.name=prefix+'42';
+    const csv=exportCSV(fixture,'SAMPLE');
+    assert.ok(csv.includes('"\''+prefix+'42"'), 'unsafe CSV prefix '+JSON.stringify(prefix));
+  }
+});
