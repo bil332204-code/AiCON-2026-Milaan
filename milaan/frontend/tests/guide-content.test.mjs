@@ -50,4 +50,13 @@ test('private beta stays honest without removing the anonymous demo or weakening
   for(const rule of [1,2,3,4,5,6,7,8]){assert.ok(english.includes('('+rule+')'));assert.ok(urdu.includes('('+rule+')'));}
   assert.match(english,/24 hours/);assert.match(urdu,/24 ghantay/);
   assert.match(english,/reversal\/refund/);assert.match(urdu,/refund\/reversal/);
+  const recognizedStatuses = ['success','successful','completed','paid','payment successful','transaction successful'];
+  for(const status of recognizedStatuses){
+    assert.ok(english.includes(status), 'English status: '+status);
+    assert.ok(urdu.includes(status), 'Roman Urdu status: '+status);
+  }
+  assert.match(english,/Milaan does not verify settlement with the bank or ship orders/);
+  assert.match(urdu,/Milaan bank se payment confirm nahi karta aur order khud ship nahi karta/);
+  assert.match(english,/seller confirms the sender's and receiver's Transaction IDs correspond/);
+  assert.match(urdu,/seller ne sender aur receiver ke Transaction IDs ki correspondence confirm ki ho/);
 });
