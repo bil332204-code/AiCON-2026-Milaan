@@ -62,7 +62,9 @@ test('small hero label meets AA contrast against the dark canvas baseline', asyn
 
 test('guide dialog keeps focus inside until Escape and restores opener focus', async ({page}) => {
   await page.goto('/');
-  const opener = page.locator('.site-header [data-action="help"]');
+  await page.locator('.hero-actions [data-action="demo"]').click();
+  await expect(page.locator('#workspace')).toBeVisible();
+  const opener = page.locator('.app-header [data-action="help"]');
   await opener.focus();
   await page.keyboard.press('Enter');
   const guide = page.locator('#help-dialog');
