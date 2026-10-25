@@ -8,6 +8,7 @@ PKT = ZoneInfo("Asia/Karachi")
 
 def paisa(value):
     s = re.sub(r"^(PKR|Rs\.?)\s*", "", str(value).strip(), flags=re.I)
+    if len(s) > 32: raise ValueError("Amount out of range")
     if not re.fullmatch(r"(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?", s):
         raise ValueError("Use a positive decimal amount with at most two decimal places")
     result = int(Decimal(s.replace(",", "")) * 100)
@@ -19,7 +20,8 @@ def parse_time(value):
         raise ValueError("Use a full ISO timestamp, e.g. 2026-10-09T14:22:00+05:00")
     d = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if d.tzinfo is None: d = d.replace(tzinfo=PKT)
-    return d.astimezone(timezone.utc).replace(tzinfo=None)
+    try: return d.astimezone(timezone.utc).replace(tzinfo=None)
+    except OverflowError: raise ValueError("Timestamp is outside the supported UTC range") from None
 
 def norm_ref(s): return re.sub(r"\s", "", str(s or "")).upper()
 def _identity_full_ref_v1(s): return bool(s) and len(str(s).strip()) >= 5 and not re.search(r"[.*…•]|xx|masked|last\s*\d", str(s), re.I)

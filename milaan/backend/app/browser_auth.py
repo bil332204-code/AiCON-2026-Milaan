@@ -17,7 +17,7 @@ def check_origin(request, settings):
 
 def check_csrf(request, settings, raw):
     check_origin(request, settings)
-    if not hmac.compare_digest(request.headers.get('x-csrf-token', ''), csrf_token(raw)):
+    if not hmac.compare_digest(request.headers.get('x-csrf-token', '').encode('utf-8'), csrf_token(raw).encode('ascii')):
         raise HTTPException(403, 'Browser session security token missing or stale; reload and retry')
 
 

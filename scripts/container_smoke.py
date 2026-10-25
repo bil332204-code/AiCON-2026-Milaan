@@ -35,7 +35,11 @@ with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as c:
     csrf=r.json()['csrf_token']
     assert c.post('/api/batches',json={'name':'Rejected CSRF request'}).status_code==403
     r=c.post('/api/batches',headers={'X-CSRF-Token':csrf},json={'name':'Synthetic persistent container batch'});assert r.status_code==201
-    print(json.dumps({'batch_id':r.json()['id'],'cookie':c.cookies.get('milaan_session')}))
+    batch_id=r.json()['id']
+    # Arbitrary forwarded headers must not mint a fresh rate-limit identity.
+    codes=[c.post('/api/auth/login',headers={'X-Forwarded-For':f'192.0.2.{i+1}'},json={'email':'absent@example.com','password':'synthetic-invalid-password'}).status_code for i in range(16)]
+    assert codes[-1]==429, codes
+    print(json.dumps({'batch_id':batch_id,'cookie':c.cookies.get('milaan_session')}))
 '''
 RESTORE='''
 import json,sys,httpx
@@ -58,7 +62,7 @@ try:
     state=json.loads(first.stdout)
     docker('restart',name);wait_ready()
     docker('exec','-i',name,'python','-c',RESTORE,input=json.dumps(state))
-    print('Container checks passed: non-root app, cinematic assets, CSRF, persistent data/session after restart, logout revocation.')
+    print('Container checks passed: non-root app, cinematic assets, CSRF, persistent data/session after restart, logout revocation, forwarded-IP spoof rejection.')
 finally:
     docker('rm','--force',name,check=False)
     docker('volume','rm',volume,check=False)
