@@ -47,3 +47,14 @@ test('payment preview is keyboard accessible and motion preference persists', as
   expect(await page.evaluate(()=>localStorage.getItem('milaan-motion'))).toBe(saved);
   await expect(page.locator('#confirm-dialog[aria-labelledby="confirm-title"]')).toHaveCount(1);
 });
+
+test('small hero label meets AA contrast against the dark canvas baseline', async ({page}) => {
+  await page.goto('/');
+  const contrast = await page.evaluate(() => {
+    const text = getComputedStyle(document.querySelector('.hero .eyebrow')).color;
+    const channels = (text.match(/[0-9]+/g) || []).slice(0,3).map(Number);
+    const brightness = rgb => rgb.map(c => {const x=c/255;return x<=0.04045?x/12.92:((x+0.055)/1.055)**2.4;}).reduce((v,c,i)=>v+c*[.2126,.7152,.0722][i],0);
+    return (brightness(channels)+.05)/(brightness([8,11,24])+.05);
+  });
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
+});
