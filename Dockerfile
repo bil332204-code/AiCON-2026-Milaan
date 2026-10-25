@@ -16,4 +16,4 @@ USER milaan
 ENV DATABASE_URL=sqlite:////app/data/milaan.db STORAGE_DIR=/app/data/uploads
 EXPOSE 8000
 HEALTHCHECK --interval=20s --timeout=5s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"
-CMD ["sh","-c","python -m alembic upgrade head && exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh","-c","python -m alembic upgrade head && exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers"]
