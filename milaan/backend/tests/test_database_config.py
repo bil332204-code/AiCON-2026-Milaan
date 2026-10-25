@@ -6,7 +6,7 @@ from app.database import database_url, Database
 def production(**overrides):
     fields = dict(app_env='production', public_origin='https://milaan.example.com', cookie_secure=True,
         database_url='postgresql://synthetic:unused@db.example.com/synthetic?sslmode=verify-full',
-        migration_database_url='', storage_backend='s3', s3_endpoint_url='https://storage.example.com', s3_bucket='synthetic',
+        migration_database_url='', registration_open=False, storage_backend='s3', s3_endpoint_url='https://storage.example.com', s3_bucket='synthetic',
         s3_region='ap-southeast-1', s3_access_key_id='synthetic', s3_secret_access_key='synthetic-secret',
         require_email_verification=True, demo_seller_email='', demo_seller_password='')
     return Settings(**(fields | overrides))

@@ -38,12 +38,9 @@ class Settings:
     gemini_key: str = field(repr=False, default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", ""))
     require_email_verification: bool = field(default_factory=lambda: flag("REQUIRE_EMAIL_VERIFICATION", True))
-    smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", ""))
-    smtp_port: int = field(default_factory=lambda: int(os.getenv("SMTP_PORT", "587")))
-    smtp_user: str = field(default_factory=lambda: os.getenv("SMTP_USER", ""))
-    smtp_password: str = field(repr=False, default_factory=lambda: os.getenv("SMTP_PASSWORD", ""))
-    smtp_from: str = field(default_factory=lambda: os.getenv("SMTP_FROM", ""))
-    smtp_security: str = field(default_factory=lambda: os.getenv("SMTP_SECURITY", "starttls"))
+    resend_api_key: str = field(repr=False, default_factory=lambda: os.getenv("RESEND_API_KEY", ""))
+    email_from: str = field(default_factory=lambda: os.getenv("EMAIL_FROM", ""))
+    email_delivery_verified: bool = field(default_factory=lambda: flag("EMAIL_DELIVERY_VERIFIED", False))
     model_timeout: int = 25
     worker_lease_seconds: int = 300
     max_batches: int = 100
@@ -105,8 +102,24 @@ class Settings:
             raise ValueError("Production requires HTTPS PUBLIC_ORIGIN, secure cookies and email verification")
         if self.app_env == "production" and (self.demo_seller_email or self.demo_seller_password):
             raise ValueError("Demo operator provisioning is development-only")
-        if self.smtp_security not in {"starttls", "ssl"}:
-            raise ValueError("SMTP_SECURITY must be starttls or ssl")
+        if self.resend_api_key and any(c.isspace() for c in self.resend_api_key):
+            raise ValueError("RESEND_API_KEY must not contain whitespace")
+        if self.email_from:
+            from email.headerregistry import HeaderRegistry
+            from email_validator import validate_email, EmailNotValidError
+            try:
+                if len(self.email_from) > 320 or any(c in self.email_from for c in "\r\n"):
+                    raise ValueError()
+                header = HeaderRegistry()("From", self.email_from)
+                if header.defects or len(header.addresses) != 1: raise ValueError()
+                validate_email(header.addresses[0].addr_spec, check_deliverability=False)
+            except (ValueError, EmailNotValidError, IndexError):
+                raise ValueError("EMAIL_FROM must be a single valid sender mailbox") from None
+        if self.resend_api_key and not self.email_from:
+            raise ValueError("Set EMAIL_FROM with RESEND_API_KEY")
+        if self.app_env == "production" and self.registration_open and not (
+                self.email_delivery_verified and self.resend_api_key and self.email_from):
+            raise ValueError("Keep registration disabled until live Resend email delivery is verified")
         if self.extraction_provider not in {"manual", "gemini"}:
             raise ValueError("EXTRACTION_PROVIDER must be manual or gemini")
         if "*" in self.cors_origins:

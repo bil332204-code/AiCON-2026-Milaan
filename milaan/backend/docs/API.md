@@ -195,4 +195,10 @@ Legacy local accounts retain password access and may confirm their email using
 `POST /api/auth/verify-account-email` with challenge_id/code. Guest verification
 cannot consume an authenticated-account challenge. Source schema and ownership
 remain unchanged. Read the [V3 deployment guide](../../../docs/V3_DEPLOYMENT.md)
-for cookies, SMTP, migrations and the separately hosted identity boundary.
+for cookies, migrations and the separately hosted identity boundary.
+
+Transactional email now uses Resend HTTPS with server-only `RESEND_API_KEY` and
+`EMAIL_FROM`. Production registration requires explicit `EMAIL_DELIVERY_VERIFIED=true`
+after authorized live delivery checks; keep `ALLOW_REGISTRATION=false` meanwhile.
+Provider failures never expose response bodies; recovery retains its generic response.
+See [V4 Resend email](../../../docs/V4_RESEND_EMAIL.md).

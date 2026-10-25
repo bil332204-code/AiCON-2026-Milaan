@@ -47,3 +47,12 @@ Previously unverified local users must confirm the mailbox from an authenticated
 account first. Their IDs, password access and financial ownership are not rewritten.
 Hosted provider identities are not linked by email strings. See
 [V3 migration boundaries](V3_IDENTITY_MIGRATION.md) and [release evidence](V3_RELEASE.md).
+
+### V4 transactional email
+
+Verification and recovery messages use the Resend HTTPS API. Resend processes the
+recipient address and authentication message, including its OTP or reset link.
+The application does not send financial records in these emails and does not log
+provider bodies or token-bearing payloads. Operators must review provider retention,
+suppression and delivery logging, and disable tracking for authentication messages.
+No live message or provider configuration change occurred during V4 development.

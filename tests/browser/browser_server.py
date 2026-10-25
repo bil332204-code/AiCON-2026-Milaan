@@ -1,4 +1,4 @@
-"""Test-only SMTP transport. Not included in the deployable app or Docker image."""
+"""Test-only email capture. Not included in the deployable app or Docker image."""
 import json
 import os
 from pathlib import Path

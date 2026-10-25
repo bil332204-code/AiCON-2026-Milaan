@@ -20,7 +20,7 @@ def env(tmp_path):
         admin = create_engine(target)
         with admin.begin() as connection: connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         target = make_url(target).update_query_dict({'options': '-csearch_path=' + schema}).render_as_string(hide_password=False)
-    settings = Settings(app_env="development", cookie_secure=False, demo_seller_email="", demo_seller_password="", database_url=target or f"sqlite:///{tmp_path}/test.db", migration_database_url="", storage_backend="s3" if target else "local", s3_prefix="synthetic/"+uuid.uuid4().hex+"/", registration_open=True, storage_dir=tmp_path/"uploads", run_worker=False, testing=True, require_email_verification=False,
+    settings = Settings(app_env="development", cookie_secure=False, demo_seller_email="", demo_seller_password="", database_url=target or f"sqlite:///{tmp_path}/test.db", migration_database_url="", storage_backend="s3" if target else "local", s3_prefix="synthetic/"+uuid.uuid4().hex+"/", registration_open=True, storage_dir=tmp_path/"uploads", run_worker=False, testing=True, resend_api_key="", email_from="", email_delivery_verified=False, require_email_verification=False,
                         extraction_provider="manual", gemini_key="", gemini_model="")
     app = create_app(settings)
     Base.metadata.create_all(app.state.database.engine)

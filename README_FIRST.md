@@ -8,7 +8,7 @@ Milaan is the receipt / statement checker. The demo shop is a separate app, data
 
 1. Extract this ZIP to a **new folder**. Keep your existing project as a backup. Stop your old servers if they use port 8000 or 8090.
 2. Double-click **SETUP.bat**. Internet is required to install Python packages. It tries Python 3.12 first, otherwise your `python` command. It creates a fresh `.venv`; do not copy your old one.
-3. Enter your operator email and a new password of at least 10 characters. Remember these; use the same credentials in both apps. This privately configured demo operator can sign in without SMTP. Public new signups still use email verification.
+3. Enter your operator email and a new password of at least 10 characters. Remember these; use the same credentials in both apps. This privately configured demo operator can sign in without email delivery. Public new signups still use email verification.
 4. Double-click **START_DEMO.bat**. Keep both terminal windows open. Wait for both to say `Application startup complete`.
 5. Open **http://127.0.0.1:8000** for Milaan and **http://127.0.0.1:8090** for the separate demo store.
 6. In Milaan click **Use your own files** to enter/sign in, then open **Saved batches**, and ensure Backend address is `http://127.0.0.1:8000`. In the store, connect with the same credentials.
@@ -30,7 +30,7 @@ GEMINI_MODEL=your_available_image_capable_model_id
 
 Copy only the relevant Gemini settings from your old configuration; do not replace this new `.env` with an old database path. Restart Milaan, reopen its Settings, then use receipt-reading mode. No key is included. Gemini calls were not exercised here. Manual receipt checking and fixture tests work without a key.
 
-For new-user email OTP, fill SMTP_HOST, SMTP_PORT, SMTP_SECURITY, SMTP_USER, SMTP_PASSWORD and SMTP_FROM. No SMTP delivery was tested here. The configured operator avoids this dependency during the demo.
+For new-user email OTP, configure RESEND_API_KEY and EMAIL_FROM for Resend HTTPS. No live inbox delivery was tested here; keep production registration closed until verified. The configured operator avoids this dependency during the demo.
 
 ## Linux / macOS
 
@@ -78,7 +78,7 @@ with Ctrl+C, or use another port. Never kill an unknown process. When changing t
 backend port, set `MILAAN_URL` for the demo-store process and the frontend Backend
 address to the same URL. Uvicorn fails with a bind error for occupied ports.
 
-For isolated loopback development without an operator or SMTP, launch Milaan with
+For isolated loopback development without an operator or email delivery, launch Milaan with
 `REQUIRE_EMAIL_VERIFICATION=false` before the uvicorn command and register your own
 account. This is an explicit development-only override; keep verification enabled
 for public deployments. Do not invent or commit credentials. Services must restart
@@ -95,8 +95,11 @@ material where they differ from this guide.
 The integrated UI now uses HttpOnly browser sessions, with password visibility,
 verified signup, recovery and finite remember-me. Existing local passwords and data
 remain usable. If your older account has no recorded email verification, confirm its
-email in Account & content before password recovery can be enabled. SMTP must be
+email in Account & content before password recovery can be enabled. Resend HTTPS email must be
 configured for verification and reset delivery; no shared default credentials exist.
 Keep development HTTP bound to loopback. Use the root Dockerfile and
 [V3 deployment guide](docs/V3_DEPLOYMENT.md) for the new same-origin production path.
 The separately hosted Sites website is not updated by these repository changes.
+
+See [V4 email delivery](docs/V4_RESEND_EMAIL.md) for configuration, delivery failure
+semantics and the production registration gate. Obsolete SMTP variables are ignored.
