@@ -46,6 +46,7 @@ export function createBackend(hooks) {
     $('#account-code').required=verifying;$('#account-code').disabled=!verifying;
     $('#account-submit').textContent=verifying?'Verify email & continue':signup?'Create account':reset?'Update password':forgot?'Send recovery link':'Sign in';
     $('#account-switch').textContent=signup||reset||forgot||verifying?'Back to sign in':'Create a new account';
+    $('#account-switch').hidden=!verifying&&authMode==='login'&&document.querySelector('meta[name="milaan-registration-state"]')?.content==='closed';
     if(verifying){$('#verification-message').textContent=`We sent a code to ${challenge.email}. It expires in 10 minutes.`;$('#account-code').focus();}
   }
   function authError(error){$('#account-error').hidden=false;$('#account-error').textContent=Array.isArray(error.detail)?error.detail.map(e=>e.msg).join(' '):error.message==='Failed to fetch'?'Could not connect. Try again, or check your connection.':error.message;}

@@ -111,3 +111,30 @@ def test_public_document_head_requests_keep_security_and_canonical_headers(env, 
     assert response.headers['x-content-type-options'] == 'nosniff'
     assert 'no-store' in response.headers['cache-control']
     assert client.head(settings.public_origin + '/workspace', follow_redirects=False).status_code == 303
+
+def test_registration_gate_is_publicly_honest_without_opening_signup(env):
+    client, _, settings = env
+    settings.registration_open = False
+    response = client.get("/")
+    assert response.status_code == 200
+    assert '<meta name="milaan-registration-state" content="closed">' in response.text
+    assert client.post("/api/auth/register", json={}).status_code == 403
+    settings.registration_open = True
+    assert '<meta name="milaan-registration-state" content="open">' in client.get("/").text
+
+def test_public_guide_links_downloadable_synthetic_csvs(env):
+    client,_,_=env
+    guide=client.get("/guide")
+    assert "Statement CSV help" in guide.text
+    assert "Statement CSV ka tareeqa" in guide.text
+    for path, expected in [("/samples/orders.csv","order_ref"),("/samples/statement.csv","transaction_id")]:
+        response=client.get(path)
+        assert response.status_code == 200
+        assert expected in response.text
+
+def test_legal_roman_urdu_summary_is_clearly_non_authoritative(env):
+    client,_,_=env
+    for path in ["/privacy","/terms","/about"]:
+        page=client.get(path).text
+        assert 'lang="ur-Latn"' in page and "sirf khulasa" in page
+        assert "English draft" in page
