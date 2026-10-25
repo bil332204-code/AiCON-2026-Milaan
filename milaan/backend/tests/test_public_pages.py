@@ -121,7 +121,7 @@ def test_social_metadata_sitemap_and_helpful_missing_route(env):
         assert 'property="og:image"' in page.text
         assert 'name="twitter:card" content="summary_large_image"' in page.text
         assert f'{settings.public_origin}/share-card.png' in page.text
-    for target, text in [("/share-card.png",null),("/robots.txt","Sitemap:"),("/sitemap.xml","<urlset")]:
+    for target, text in [("/share-card.png",None),("/robots.txt","Sitemap:"),("/sitemap.xml","<urlset")]:
         response=client.get(target)
         assert response.status_code==200
         if text is not None: assert text in response.text
