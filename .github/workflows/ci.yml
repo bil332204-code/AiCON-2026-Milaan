@@ -28,6 +28,7 @@ jobs:
       - name: PostgreSQL and private S3 integration (synthetic local services)
         run: python scripts/test_postgres_s3.py
       - run: python tests/live_demo_check.py
+      - run: python scripts/frontend_perf_budget.py
       - run: node --test milaan/frontend/tests/*.test.mjs
       - run: npm --prefix milaan/frontend run check
       - name: Install browser test dependencies
