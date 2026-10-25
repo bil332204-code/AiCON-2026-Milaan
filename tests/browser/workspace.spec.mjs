@@ -8,7 +8,7 @@ async function confirmImport(page) {
 }
 async function login(page) {
   await page.goto('/');
-  await page.getByRole('button',{name:'Use your own files'}).click();
+  await page.locator('.site-header [data-action="workspace"]').click();
   await page.locator('#account-email').fill('browser@example.com');
   await page.locator('#account-password').fill('wrong-password');
   await page.locator('#account-submit').click();
@@ -117,7 +117,7 @@ test('combined payment shares require explicit review and persist without double
   const checked=await request.patch(`/api/claims/${claim.id}`,{headers,data:{expected_version:claim.version,confirmed:true,fields:{is_payment_receipt:true,amount_pkr:'150',datetime_local:'2026-10-09T14:00',transaction_id:reference,status_text:'Successful'}}});expect(checked.ok(),await checked.text()).toBeTruthy();
   const jobResponse=await request.post(`/api/batches/${batch.id}/reconcile`,{headers:{...headers,'Idempotency-Key':'browser-combined-run'}});expect(jobResponse.ok()).toBeTruthy();const job=await jobResponse.json();
   await expect.poll(async()=>{const r=await request.get(`/api/jobs/${job.id}`,{headers});return (await r.json()).status;}).toBe('done');
-  await page.goto('/');await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+  await page.goto('/');await page.locator('.site-header [data-action="workspace"]').click();
   await page.locator('#account-email').fill('browser@example.com');await page.locator('#account-password').fill('synthetic-browser-test-password');await page.locator('#account-submit').click();
   await page.locator(`[data-batch-id="${batch.id}"]`).click();
   await expect(page.locator('#results-body .pill.review')).toHaveCount(2);
