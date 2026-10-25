@@ -1,22 +1,22 @@
 # Milaan Phase 1 — evidence-led implementation and security review
 
-25 October 2026. Scope: guide, Transaction ID / Reference number, CTA/arrow clarity, public draft trust pages and conservative security improvements. This change is **not** a financial compliance audit or a proof of production email delivery. No production secrets, real seller records or matching decisions were edited.
+25 October 2026. Scope: guide, Transaction ID, CTA/arrow clarity, public draft trust pages and conservative security improvements. This change is **not** a financial compliance audit or a proof of production email delivery. No production secrets, real seller records or matching decisions were edited.
 
 ## 1. Seller guide — English and Roman Urdu
 
 **Before:** `milaan/frontend/dist/index.html:59` was a single technical guide with "configuring the backend" and "retained allocations". It had no language control.
 
-**After:** `milaan/frontend/dist/index.html` includes four numbered steps in both English and Roman Urdu, a worked fictional PKR 3,500 example, accurate meanings of SHIP/HOLD/REVIEW, an explanation of the origin of the Transaction ID / Reference number, conservative missing/partial-reference guidance, CSV download guidance, no-signup demo and account limits. `milaan/frontend/dist/guide.js:1-16` manages the native-dialog language toggle with `hidden` and `aria-pressed`. `milaan/frontend/dist/phase1.css` retains the existing dark look.
+**After:** `milaan/frontend/dist/index.html` includes four numbered steps in both English and Roman Urdu, a worked fictional PKR 3,500 example, accurate meanings of SHIP/HOLD/REVIEW, an explanation of the origin of the Transaction ID, conservative missing/partial-reference guidance, CSV download guidance, no-signup demo and account limits. `milaan/frontend/dist/guide.js:1-16` manages the native-dialog language toggle with `hidden` and `aria-pressed`. `milaan/frontend/dist/phase1.css` retains the existing dark look.
 
 **Tests:** `milaan/frontend/tests/guide-content.test.mjs`, `milaan/backend/tests/test_public_pages.py::test_home_and_guide_include_reference_explanation_and_bilingual_steps`; pre-existing browser modal/workspace tests remain part of CI.
 
-**Risks and what I did not check:** Romanian? No; language is **Roman Urdu**, not native-script Urdu. The translations need review with Pakistani sellers and full mobile/browser keyboard testing. The FAQ section dynamically inserted by the account UI is not fully translated.
+**Risks and what I did not check:** The language is Roman Urdu, not Urdu script. The translations need review with Pakistani sellers and full mobile/browser keyboard testing. The FAQ section dynamically inserted by the account UI is not fully translated.
 
-## 2. Transaction ID / Reference number — exact matching behavior, no rules changed
+## 2. Transaction ID — exact matching behavior, no rules changed
 
 **Before:** `milaan/frontend/dist/index.html:41-48` showed fictional `MLN778810` without saying its source. `milaan/frontend/dist/engine.js:116-119` contains the fictional demo records that use this prefix. `MLN` is **not** a Milaan-generated format.
 
-**After:** The landing page, guide and visible result/input labels use **Transaction ID / Reference number**. The customer finds it on their payment confirmation screen/receipt; the seller checks the same value against the credit in their statement. The illustration is explicitly labeled fictional. We deliberately retained the existing demo fixture IDs so the interactive demo and its regression snapshots stay consistent.
+**After:** The landing page, guide and visible result/input labels use **Transaction ID**. The customer finds it on their payment confirmation screen/receipt; the seller checks the same value against the credit in their statement. The illustration is explicitly labeled fictional. We deliberately retained the existing demo fixture IDs so the interactive demo and its regression snapshots stay consistent.
 
 **Actual backend matcher branches** (verified source `milaan/backend/app/matcher.py`):
 - Lines **9-13, 34-49** identify full references, shared proofs and possible credits, including amount/time candidates without a complete reference.
@@ -86,3 +86,35 @@ Security header policy is also recorded in the unified PR diff. **Never promise 
 ## No matching-rule modifications
 
 This branch intentionally does not edit `milaan/backend/app/matcher.py`, `milaan/backend/matching/rules.py`, `milaan/backend/app/allocations.py`, schema/migrations, retention defaults, or credit decision behavior. The tests codify the existing rules without weakening them.
+
+
+## Revised source-of-truth notes (2026-10-25)
+
+**Which code runs on milaan.app?** Render production service `milaan-production-2026` is configured to build `main` in `bil332204-code/AiCON-2026-Milaan` with the root `Dockerfile`. The separate ChatGPT Sites instance is `milaan-studio.bil332204.chatgpt.site`. This PR touches the **Render production repository** only; it has not been merged or deployed. The distinction is now clarified in `README.md:8-36`.
+
+**Two identities, no conflation:** `order_ref` is the seller's **Order number**, not payment evidence. `transaction_id` is the customer's payment-app or bank **Transaction ID**, compared with the seller's statement credit. Preserve both exact CSV keys and API schemas because `docs/IMPORT_CONTRACTS.md:13-35` requires them. Seller-facing labels in `index.html`, `app.js` and `import-preview.js` show the two terms separately; API field names remain unchanged.
+
+**Successful statuses only:** `milaan/backend/app/matcher.py:157-160` accepts only success, successful, completed, paid, payment successful, transaction successful (trimmed, case-insensitive). `milaan/frontend/dist/engine.js:73` also returns REVIEW/STATUS_CONFLICT for unrecognized statuses. Existing `milaan/backend/tests/test_rules.py:45-51`, `milaan/frontend/tests/engine.test.mjs:20-27` and new explicit "Payment sent" tests prove it remains REVIEW. **Proposed, not implemented:** choose among Successful / Pending / Failed / Unclear while retaining a separate immutable original provider-status string and requiring manual verification; any "unclear" value must continue to REVIEW. No status mapping or decision algorithm was changed.
+
+**Full guide SHIP rule:** Confirmed receipt fields, recognized successful status, correct receiving account, exact order total, declared complete statement coverage for receipt timestamp, full Transaction ID corresponding to exactly one credit, that credit's exact amount, no greater than 24 hours between credit and screenshot time, verified sender/receiver ID correspondence, no duplicate image or credit, reversal, or allocation conflict; never bank settlement confirmation. Source `docs/IMPORT_CONTRACTS.md:38-54`, `milaan/backend/app/matcher.py:85-150`.
+
+**Seller-facing privacy source:** `docs/PRIVACY.md:3-31,42-57`. Implemented `milaan/frontend/dist/privacy.html` covers seven-day expiry, cleanup while worker runs, private receipt JPEG processing, optional Gemini with explicit consent, Resend auth-email data flow (not financial data), browser-local OCR potentially downloading an external engine, passwords/cookies and deletion limitations. It retains placeholders for hosting/backups, operator identity, legal approval, OCR provider details, support and rights. No invented legal claims.
+
+**Existing controls — do not rebuild:**
+- Receipt EXIF stripping: `milaan/backend/app/storage.py:8-23`; test `milaan/backend/tests/test_receipt_storage.py:14-45`.
+- Ownership and private access: `milaan/backend/app/main.py:136-156,542-548`; test `test_api.py:39-49`.
+- Expiry deletion: `milaan/backend/app/config.py:36`, `jobs.py:119-136`; tests `test_api.py:87-100` and `test_receipt_storage.py:101-118`.
+- Hashed passwords: `milaan/backend/app/security.py:5-24`; test `test_browser_auth.py:67-79,81-102`.
+- Cookie auth/CSRF: `milaan/backend/app/browser_auth.py:7-32`; tests `test_browser_auth.py:36-64,118-135`.
+- SHIP/HOLD/REVIEW, reused proof, wrong amount: `milaan/backend/app/matcher.py:85-150`; tests `test_rules.py:25-43`, `test_payment_allocations.py:60-106,160-180`.
+- Result CSV formula protection ALREADY existed: `milaan/backend/app/parsing.py:97-106`, `milaan/frontend/dist/engine.js:106-107`; tests `test_api.py:51-59`, `engine.test.mjs:17`. The only edit strengthens tab/CR edge cases and adds tests. No export rewrite.
+
+**Repository hygiene:**
+- `.gitignore` strengthened for credentials, local exports, SQLite sidecars and backups. Does not ignore source/demo fixture CSV.
+- Dedicated full-history scan via `.github/workflows/windows-secrets-audit.yml` found **one** `generic-api-key`-classified match: `tests/browser/auth-visual.spec.mjs:6`, introduced in commit `8bbbcf559446`. That line is a deliberately synthetic browser-test password, not identified as an active provider token. Value deliberately not copied to logs or this report. Detection is reported rather than blindly suppressed. Automated pattern scans do not prove absence of other leaks.
+- `SETUP.bat` uses Python 3.12 fallback and runs the interactive `setup_admin.py`; `START_DEMO.bat` opens `START_MILAAN.bat` and `START_DEMO_STORE.bat`. The Windows GitHub runner executes these on a disposable environment with an intentionally synthetic local operator; see workflow results for actual pass/fail. Its preseeded operator deliberately does not test the interactive email/password prompt.
+- Proposed GitHub repository description (cannot update repository metadata with currently exposed GitHub connector actions): **"Milaan helps small sellers compare orders, payment screenshots and supplied statements with explainable SHIP/HOLD/REVIEW suggestions. No bank connection or automatic payments."**
+- License: intentionally **NOT added**. Ask owner to choose MIT, Apache-2.0, GPL-3.0, proprietary or another license before changing code distribution terms.
+- **Layout proposal only — no moves:** `apps/milaan-api/`, `apps/milaan-web/`, `apps/demo-store/`, `docs/`, `tests/`, `deploy/`, `scripts/`, `windows/`. Reorganization would require rewriting Docker, relative imports, CI, Windows paths and docs and should be a separate approved PR.
+
+**Risks and what I did not check:** The historical match is likely synthetic, but a leak pattern scan is not a human forensic review of every commit. Windows runner does not test interactive password entry; Linux remains the independently verified development environment. GitHub repository description was proposed, not changed. Neither LICENSE nor layout moved. Privacy placeholders require owner review. Public registration remains gated because real Resend provider delivery has not been confirmed.
