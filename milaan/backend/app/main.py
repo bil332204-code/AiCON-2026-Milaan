@@ -327,8 +327,8 @@ def create_app(settings=None):
         except EmailDeliveryError as exc:
             # Fixed categories / status codes only. Do not log PII, provider errors or reset tokens.
             logging.getLogger('milaan.auth').warning(
-                'Password recovery email delivery failed (reason=%s, provider_status=%s)',
-                exc.category, exc.provider_status)
+                'Password recovery email delivery failed (reason=%s, provider_status=%s, provider_code=%s, field_hint=%s)',
+                exc.category, exc.provider_status, exc.provider_code, exc.field_hint)
         except Exception:
             logging.getLogger('milaan.auth').warning(
                 'Password recovery email delivery failed (reason=unexpected)')
