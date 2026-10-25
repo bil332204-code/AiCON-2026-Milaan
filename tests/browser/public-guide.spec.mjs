@@ -58,3 +58,20 @@ test('small hero label meets AA contrast against the dark canvas baseline', asyn
   });
   expect(contrast).toBeGreaterThanOrEqual(4.5);
 });
+
+
+test('guide dialog keeps focus inside until Escape and restores opener focus', async ({page}) => {
+  await page.goto('/');
+  const opener = page.locator('.site-header [data-action="help"]');
+  await opener.focus();
+  await page.keyboard.press('Enter');
+  const guide = page.locator('#help-dialog');
+  await expect(guide).toBeVisible();
+  for (let i=0;i<5;i++) {
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.activeElement?.closest('dialog')?.id)).toBe('help-dialog');
+  }
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await expect(opener).toBeFocused();
+});
