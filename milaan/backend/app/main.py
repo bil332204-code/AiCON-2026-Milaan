@@ -179,7 +179,7 @@ def create_app(settings=None):
         try:
             send_verification(settings, pending.email, code)
         except Exception:
-            raise HTTPException(503, "Could not send the verification email. Ask the server owner to check SMTP settings, then try again.") from None
+            raise HTTPException(503, "Could not send the verification email. Try again later or contact the server owner.") from None
 
     @app.post("/api/auth/resend-code", tags=["auth"])
     def resend_code(body: ResendEmail, db=Depends(get_db)):
@@ -324,7 +324,7 @@ def create_app(settings=None):
         pending.send_count += 1
         try: send_password_reset(settings, user.email, raw)
         except Exception:
-            logging.getLogger('milaan.auth').warning('Password recovery email delivery failed; check configured SMTP transport')
+            logging.getLogger('milaan.auth').warning('Password recovery email delivery failed; check transactional email configuration')
         db.commit()
         return message
 
