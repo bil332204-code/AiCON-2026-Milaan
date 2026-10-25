@@ -30,5 +30,12 @@ def public_document(path, origin):
                 f'<meta property="og:url" content="{url}">\n'
                 f'<meta property="og:title" content="{escape(title, quote=True)}">\n'
                 f'<meta property="og:description" content="{description}">\n'
-                '<meta property="og:type" content="website">\n')
+                '<meta property="og:type" content="website">\n'
+                f'<meta property="og:image" content="{escape(origin.rstrip("/") + "/share-card.svg",quote=True)}">\n'
+                '<meta property="og:image:width" content="1200">\n'
+                '<meta property="og:image:height" content="630">\n'
+                '<meta name="twitter:card" content="summary_large_image">\n'
+                f'<meta name="twitter:title" content="{escape(title,quote=True)}">\n'
+                f'<meta name="twitter:description" content="{escape(description,quote=True)}">\n'
+                f'<meta name="twitter:image" content="{escape(origin.rstrip("/") + "/share-card.svg",quote=True)}">\n')
     return HTMLResponse(content.replace('</head>', metadata + '</head>', 1))

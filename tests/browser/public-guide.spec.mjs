@@ -30,3 +30,20 @@ test('public guide supports keyboard language switching and policy navigation', 
   }
   expect(failures).toEqual([]);
 });
+
+
+test('payment preview is keyboard accessible and motion preference persists', async ({page}) => {
+  await page.goto('/');
+  const preview=page.getByRole('button',{name:/Illustrative payment.*explore fictional demo/});
+  await preview.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#workspace')).toBeVisible();
+  await page.goto('/');
+  const toggle=page.getByRole('button',{name:/Pause animation|Resume animation/});
+  await toggle.click();
+  const saved=await page.evaluate(()=>localStorage.getItem('milaan-motion'));
+  expect(['off','on']).toContain(saved);
+  await page.reload();
+  expect(await page.evaluate(()=>localStorage.getItem('milaan-motion'))).toBe(saved);
+  await expect(page.locator('#confirm-dialog[aria-labelledby="confirm-title"]')).toHaveCount(1);
+});

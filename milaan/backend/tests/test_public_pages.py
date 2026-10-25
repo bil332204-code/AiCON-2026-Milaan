@@ -111,3 +111,20 @@ def test_public_document_head_requests_keep_security_and_canonical_headers(env, 
     assert response.headers['x-content-type-options'] == 'nosniff'
     assert 'no-store' in response.headers['cache-control']
     assert client.head(settings.public_origin + '/workspace', follow_redirects=False).status_code == 303
+
+
+def test_social_metadata_sitemap_and_helpful_missing_route(env):
+    client,_,settings=env
+    for route in ["/","/guide","/privacy","/terms","/about"]:
+        page=client.get(route)
+        assert page.status_code==200
+        assert 'property="og:image"' in page.text
+        assert 'name="twitter:card" content="summary_large_image"' in page.text
+        assert f'{settings.public_origin}/share-card.svg' in page.text
+    for target, text in [("/share-card.svg","svg"),("/robots.txt","Sitemap:"),("/sitemap.xml","<urlset")]:
+        response=client.get(target)
+        assert response.status_code==200
+        assert text in response.text
+    unknown=client.get("/not-a-real-page", follow_redirects=False)
+    assert unknown.status_code==404
+    assert 'Page not found' in unknown.text
