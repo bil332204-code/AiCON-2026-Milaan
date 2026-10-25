@@ -1,5 +1,8 @@
 # Deploying the integrated Milaan alternative
 
+> Email update: SMTP instructions below are historical. Use
+> [V4 Resend HTTPS configuration](V4_RESEND_EMAIL.md) for current email delivery.
+
 > Production storage update: the SQLite/local-disk production path below is superseded
 > by [Render + Neon readiness](RENDER_NEON_READINESS.md). Production now requires
 > PostgreSQL and HTTPS private S3. Local SQLite remains supported for development.

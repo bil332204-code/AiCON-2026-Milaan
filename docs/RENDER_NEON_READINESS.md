@@ -96,8 +96,8 @@ superuser credentials from local synthetic tests in production.
 The template specifies each application variable. Replace PUBLIC_ORIGIN and
 CORS_ORIGINS with the same approved HTTPS Render/custom origin, with no path or
 wildcard. Keep ALLOW_REGISTRATION=false and ENABLE_DEMO=false; clear both demo seller
-bindings. No production account is auto-provisioned. Configure real verified TLS
-SMTP before testing verification/recovery. Manual extraction is the default; no
+bindings. No production account is auto-provisioned. Configure Resend HTTPS using RESEND_API_KEY and EMAIL_FROM before testing
+verification/recovery; see [V4 email delivery](V4_RESEND_EMAIL.md). Manual extraction is the default; no
 bank image is sent to an AI provider unless separately configured and explicitly
 consented to. Keep one API process/instance with RUN_WORKER_IN_API=true initially;
 multiple processes multiply the pool budget and the in-process IP rate limiter is
@@ -140,7 +140,7 @@ arbitrary forwarded headers. This release keeps registration closed.
    backup/PITR policies. Keep the existing hosted identity system available.
 3. Prepare secrets in Render securely from the template. Leave registration and
    demo provisioning closed. No real records or credentials go into `/tmp`, source,
-   application logs or build arguments. Confirm SMTP sender/delivery independently.
+   application logs or build arguments. Confirm the Resend sender and inbox delivery independently.
 4. With explicit owner approval, first run migrations in a disposable test branch
    or database and repeat synthetic integration/smoke checks against the provider.
    Confirm Alembic head and `alembic check`, runtime-role grants, pooled connection
@@ -209,7 +209,7 @@ deduplication, expiry/orphans, extraction and >1 MiB uploads without disk spooli
 The existing Starlette/httpx TestClient deprecation warning remains. Local service
 images were PostgreSQL `17-alpine` and Moto `5.1.15`; no MinIO or Neon test success
 is claimed. This does not test a real Neon pooler, provider signatures/IAM, production
-TLS, role grants, storage version deletion, real SMTP, Render limits or live load.
+TLS, role grants, storage version deletion, real Resend inbox delivery, Render limits or live load.
 The browser screenshots regenerated during regression testing were restored; no
 frontend/design/screenshot changes are included in this branch. CI has been updated
 to reproduce the isolated integration suite, but no remote CI success is claimed.

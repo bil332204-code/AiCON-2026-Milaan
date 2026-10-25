@@ -114,7 +114,7 @@ See [release evidence](docs/RELEASE_REPORT.md) for actual executed results and l
 ## Scope, history and next work
 
 This local kit does not connect to a bank, take payments, implement hosted ChatGPT
-sign-in or process PDF tables natively. Gemini and SMTP need your own configuration;
+sign-in or process PDF tables natively. Gemini and Resend HTTPS email need your own configuration;
 live provider calls and PostgreSQL have not been validated here. Financial data
 needs operational backups and a retention policy before real use.
 
@@ -143,3 +143,6 @@ registration stays disabled in that configuration; deployment requires owner app
 
 Run `.venv/bin/python scripts/test_postgres_s3.py` for isolated PostgreSQL 17 and
 S3 HTTP integration tests using synthetic data; Docker is required.
+
+V4 verification and recovery use Resend HTTPS (no SMTP dependency). See
+[the Resend configuration and registration gate](docs/V4_RESEND_EMAIL.md).
