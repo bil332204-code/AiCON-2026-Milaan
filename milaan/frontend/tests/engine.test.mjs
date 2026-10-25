@@ -50,3 +50,11 @@ test('CSV cells starting with tab, carriage return or spreadsheet formula charac
     assert.ok(csv.includes('"\''+prefix+'42"'), 'unsafe CSV prefix '+JSON.stringify(prefix));
   }
 });
+
+test('Payment sent is unclear and never auto-SHIP',()=>{
+  const fixture=demoData();
+  fixture.claims[0].status_text='Payment sent';
+  const result=reconcile(fixture)[0];
+  assert.equal(result.status,'review');
+  assert.equal(result.code,'STATUS_CONFLICT');
+});
