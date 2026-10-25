@@ -77,3 +77,39 @@ def test_whitespace_cannot_promote_a_short_reference_to_full_evidence():
     assert credit_identity('owner','wallet','A B C',parse_time('2026-10-09T14:00'),10000,'Synthetic')==expected
     o,c,s,l=fixtures();c.fields['transaction_id']='A B C';l.transaction_id='ABC'
     assert compute_matches([o],[c],[s],[l],set())[0]['final_status']=='review'
+
+
+@pytest.mark.parametrize('missing', [None, '', 'A B C', 'XX1234'])
+def test_missing_or_partial_reference_never_automatically_ships(missing):
+    order, claim, statement, credit = fixtures()
+    claim.fields['transaction_id'] = missing
+    possible = compute_matches([order], [claim], [statement], [credit], set())[0]
+    assert possible['final_status'] == 'review'
+    assert possible['reason_code'] == 'POSSIBLE_MATCH'
+    no_credit = compute_matches([order], [claim], [statement], [], set())[0]
+    assert no_credit['final_status'] == 'review'
+    assert no_credit['reason_code'] == 'PARTIAL_REFERENCE'
+
+
+def test_full_reference_statement_amount_mismatch_stays_review():
+    order, claim, statement, credit = fixtures()
+    credit.amount_paisa = 9900
+    result = compute_matches([order], [claim], [statement], [credit], set())[0]
+    assert (result['final_status'], result['reason_code']) == ('review', 'AMOUNT_CONFLICT')
+
+
+def test_same_full_reference_on_two_orders_blocks_both_even_with_distinct_images():
+    order, claim, statement, credit = fixtures()
+    second_order = NS(**{**vars(order), 'id': 'o2'})
+    second_claim = NS(**{**vars(claim), 'id': 'c2', 'order_id': 'o2', 'sha256': 'different-image'})
+    result = compute_matches([order, second_order], [claim, second_claim], [statement], [credit], set())
+    assert [(r['final_status'],r['reason_code']) for r in result] == [
+        ('review', 'REUSED_PROOF'), ('review', 'REUSED_PROOF')]
+
+
+def test_full_reference_amount_only_ships_with_all_safety_checks():
+    order, claim, statement, credit = fixtures()
+    result = compute_matches([order], [claim], [statement], [credit], set())[0]
+    assert (result['final_status'], result['reason_code']) == ('ship', 'EXACT_MATCH')
+    claim.fields_checked = False
+    assert compute_matches([order], [claim], [statement], [credit], set())[0]['final_status'] == 'review'
