@@ -138,7 +138,7 @@ document.addEventListener('click',async e=>{
     if(b.dataset.close){$('#'+b.dataset.close).close();return;}
     if(b.dataset.scenario){scenario(b.dataset.scenario);return;}
     if(b.dataset.action){e.preventDefault();const action=b.dataset.action;
-      if(action==='home')return home();if(action==='demo')return await fresh(true);if(action==='workspace'){if(await existingAccountGate())return backend.open();return;}if(action==='new'){if(await existingAccountGate())return await fresh(false);return;}if(action==='help')return $('#help-dialog').showModal();
+      if(action==='home')return home();if(action==='demo')return await fresh(true);if(action==='workspace'){if(await existingAccountGate())return backend.open();return;}if(action==='new'){if(privateBeta()&&!backend.api.authenticated){if(await existingAccountGate())return backend.open();return;}return await fresh(false);}if(action==='help')return $('#help-dialog').showModal();
       if(action==='reconcile')return await run();
       if(action==='export'){if(!state.results.length)return;if(state.remote)return await backend.exportResults();download(exportCSV(state.results,state.mode==='demo'?'FICTIONAL_DEMO':'UPLOADED_RECORDS'),'milaan-reconciliation.csv');log('Results exported',`${state.results.length} order outcomes downloaded as CSV.`);toast('Reconciliation CSV exported.');return;}
       if(action==='audit-export'){download(JSON.stringify({mode:state.mode,events:state.activity},null,2),'milaan-activity-log.json','application/json');return;}
