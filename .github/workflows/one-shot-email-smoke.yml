@@ -1,0 +1,23 @@
+name: Production Resend delivery smoke (one-shot)
+on:
+  push:
+    branches: [test/milaan-resend-production-20261025]
+permissions:
+  contents: read
+jobs:
+  test-reset-email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Request temporary password reset email
+        shell: bash
+        env:
+          SMOKE_RECIPIENT: "bil332204+milaan-launch-smoke@gmail.com"
+        run: |
+          set -euo pipefail
+          payload="$(printf '{"email":"%s"}' "$SMOKE_RECIPIENT")"
+          http_code="$(curl --retry 2 --retry-delay 3 --retry-connrefused --connect-timeout 12 --max-time 50 -sS -o /tmp/reset-response.json -w '%{http_code}' -X POST 'https://milaan.app/api/auth/request-password-reset' -H 'Origin: https://milaan.app' -H 'Content-Type: application/json' --data-raw "$payload")"
+          echo "Password reset endpoint HTTP status: $http_code"
+          [[ "$http_code" == "200" ]]
+          grep -q 'check your inbox' /tmp/reset-response.json
+          echo "Accepted request; Gmail inbox and Render logs must confirm actual delivery separately."
