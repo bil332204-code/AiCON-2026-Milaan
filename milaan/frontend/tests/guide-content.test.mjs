@@ -12,7 +12,8 @@ test('seller guide exposes four steps in English and Roman Urdu, with a real lan
   for(const id of ['guide-en','guide-ur']){
     const block=entry.split('id="'+id+'"')[1].split('</section>')[0];
     assert.equal((block.match(/<li>/g)||[]).length,4);
-    assert.match(block,/Transaction ID \/ Reference number/);
+    assert.match(block,/Transaction ID/);
+    assert.match(block,/Order number/);
   }
   assert.match(guide,/button\.addEventListener\('click'/);
 });
@@ -26,7 +27,10 @@ test('all local CTAs use consistent names and do not use external-link arrows',(
 });
 
 test('landing explains transaction reference source without inventing Milaan ID format',()=>{
-  assert.match(entry,/Milaan does not create this number/);
+  assert.match(entry,/Milaan does not generate it/);
   assert.match(entry,/MLN is fictional demo data, not a Milaan ID format/);
-  assert.match(entry,/partial Transaction ID \/ Reference number: REVIEW/);
+  assert.match(entry,/partial Transaction ID: REVIEW/);
+  assert.match(entry,/24 hours/);
+  assert.match(entry,/24 ghantay/);
+  assert.doesNotMatch(entry,/Transaction ID \/ Reference number/);
 });
