@@ -17,7 +17,7 @@ function log(title,detail){state.activity.unshift({title,detail,at:Date.now()});
 log('Demo batch is ready','12 fictional orders, sample receipt fields and a synthetic statement. Matching is computed locally.');
 const privateBeta=()=>document.querySelector('meta[name="milaan-registration-state"]')?.content==='closed';
 async function existingAccountGate(){
-  if(!privateBeta()||backend.authenticated())return true;
+  if(!privateBeta()||backend.api.authenticated)return true;
   return await ask('Private beta · Existing accounts only',
     'New signups are not available yet. Naya account filhaal nahi ban sakta. You can explore the fictional demo without signing in. If you already have an account, continue to sign in.',
     'Sign in with existing account');
