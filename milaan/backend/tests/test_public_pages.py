@@ -128,3 +128,13 @@ def test_social_metadata_sitemap_and_helpful_missing_route(env):
     unknown=client.get("/not-a-real-page", follow_redirects=False)
     assert unknown.status_code==404
     assert 'Page not found' in unknown.text
+
+def test_social_raster_is_valid_1200_by_630(env):
+    from io import BytesIO
+    from PIL import Image
+    response=env[0].get('/share-card.png')
+    assert response.status_code==200
+    assert response.headers['content-type'].startswith('image/png')
+    with Image.open(BytesIO(response.content)) as picture:
+        assert picture.size == (1200,630)
+        picture.verify()
