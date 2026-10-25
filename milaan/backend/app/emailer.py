@@ -1,6 +1,7 @@
 """Transactional mail over Resend HTTPS only. Never log payloads or provider errors."""
 import secrets
 import time
+import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import httpx
@@ -9,11 +10,37 @@ RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 
 class EmailDeliveryError(RuntimeError):
-    def __init__(self, category, provider_status=None):
+    def __init__(self, category, provider_status=None, provider_code='unknown', field_hint='none'):
         self.category = category
-        # Only numeric HTTP status, never the provider's response body, recipients, or credentials.
+        # Fixed classification values only; never log provider body, recipients or credentials.
         self.provider_status = provider_status
+        self.provider_code = provider_code
+        self.field_hint = field_hint
         super().__init__('Transactional email delivery failed')
+
+
+def _safe_rejection_classification(response):
+    """Return fixed safe labels; intentionally discard raw Resend provider messages."""
+    try:
+        data = response.json()
+    except (ValueError, TypeError):
+        data = None
+    if not isinstance(data, dict):
+        return 'unknown', 'none'
+    code = data.get('name')
+    allowed = {'validation_error', 'invalid_idempotency_key', 'invalid_from_address',
+               'missing_required_field', 'invalid_parameter', 'restricted_api_key',
+               'invalid_api_key', 'invalid_email', 'invalid_access'}
+    code = code if isinstance(code, str) and code in allowed else 'unknown'
+    message = data.get('message')
+    field = 'none'
+    if isinstance(message, str):
+        message = message.lower()
+        for name in ('idempotency', 'domain', 'recipient', 'sender', 'from', 'to', 'subject', 'text', 'html'):
+            if re.search(r'(?<![a-z])' + name + r'(?![a-z])', message):
+                field = name
+                break
+    return code, field
 
 
 def _client():
@@ -58,7 +85,8 @@ def _send(settings, recipient, subject, text):
                         continue
                 raise EmailDeliveryError('unavailable', response.status_code)
             if response.status_code not in {200, 201}:
-                raise EmailDeliveryError('rejected', response.status_code)
+                code, hint = _safe_rejection_classification(response)
+                raise EmailDeliveryError('rejected', response.status_code, code, hint)
             try: message_id = response.json().get('id')
             except (ValueError, AttributeError): message_id = None
             if not isinstance(message_id, str) or not message_id or len(message_id) > 128:
