@@ -78,7 +78,9 @@ export function createBackend(hooks) {
   async function authenticate(action='batches',requestedMode='login'){
     await ready;pending=action;
     if(api.authenticated&&requestedMode==='login'){if(action==='new')return newBatch();if(action==='sample')return serverDemo();return showWorkspace('batches');}
-    mode(requestedMode);document.body.classList.add('auth-open');if(!authDialog.open)authDialog.showModal();requestAnimationFrame(()=>{const target=challenge?$('#account-code'):requestedMode==='signup'?$('#account-name'):requestedMode==='reset'?$('#account-password'):$('#account-email');target.focus();});
+    mode(requestedMode);document.body.classList.add('auth-open');if(!authDialog.open)authDialog.showModal();
+    // Focus before accepting input; a delayed frame can steal focus mid-keystroke.
+    const target=challenge?$('#account-code'):requestedMode==='signup'?$('#account-name'):requestedMode==='reset'?$('#account-password'):$('#account-email');target.focus();
   }
   function restore(){
     ready=(async()=>{

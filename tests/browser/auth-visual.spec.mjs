@@ -4,6 +4,22 @@ async function mail(kind,email){
  let value;await expect.poll(async()=>{const text=await fs.readFile('/tmp/milaan-browser-test-outbox.jsonl','utf8').catch(()=> '');value=text.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)).filter(item=>item.kind===kind&&item.email===email).at(-1)?.value;return !!value;}).toBe(true);return value;
 }
 const password='synthetic-v3-long-passphrase';
+
+test('reset dialog does not steal focus when rendering resumes', async ({page}) => {
+ await page.addInitScript(() => {
+   const frames = [];
+   window.requestAnimationFrame = callback => frames.push(callback);
+   window.resumeTestFrames = () => {
+     for (const callback of frames.splice(0)) callback(performance.now());
+   };
+ });
+ await page.goto('/reset-password#token='+'x'.repeat(64));
+ await expect(page.locator('#account-heading')).toHaveText('A fresh start.');
+ await page.locator('#account-confirm').focus();
+ await page.evaluate(() => window.resumeTestFrames());
+ await expect(page.locator('#account-confirm')).toBeFocused();
+});
+
 async function signup(page,email){
  await page.goto('/signup');await expect(page.locator('#account-dialog')).toBeVisible();
  await page.locator('#account-name').fill('Synthetic V3 Seller');await page.locator('#account-email').fill(email);

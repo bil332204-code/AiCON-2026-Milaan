@@ -84,16 +84,6 @@ def test_resend_400_exposes_only_fixed_diagnostic_labels(env,monkeypatch):
     assert '123456' not in repr(error.value)
 
 
-def test_sanitized_provider_summary_does_not_log_tokens_or_addresses():
-    response = httpx.Response(400, json={'name': 'validation_error',
-        'message': "Cannot send email with this delivery address user+sample@example.com"})
-    summary = emailer._safe_provider_summary(response)
-    assert 'user+sample' not in summary and 'example.com' not in summary
-    assert '[email]' in summary
-    dangerous = httpx.Response(400,json={'message':'OTP 123456 at https://milaan.app/#token=private'})
-    assert emailer._safe_provider_summary(dangerous)=='redacted'
-
-
 def test_long_rate_limit_does_not_sleep_or_retry(env,monkeypatch):
     calls=[]
     transport(monkeypatch,lambda r:(calls.append(r) or httpx.Response(429,headers={'Retry-After':'60'})))
@@ -138,9 +128,15 @@ def test_signup_verification_and_password_reset_through_real_adapter(env,monkeyp
     assert client.get('/api/auth/me',headers={'Authorization':'Bearer '+verified.json()['access_token']}).status_code==401
 
 
-def test_api_failures_do_not_expose_provider_body_or_account_existence(env,monkeypatch,caplog):
+@pytest.mark.parametrize('provider_message', [
+    'synthetic-resend-secret recipient OTP 123456',
+    'Cannot send for Synthetic Customer at 42 Fictional Street',
+    'Invalid text: verification digits 123 456',
+    'Invalid text: reset code short-token-123',
+])
+def test_api_failures_do_not_expose_provider_body_or_account_existence(env,monkeypatch,caplog,provider_message):
     client,db,settings=env;configure(env);settings.require_email_verification=True
-    transport(monkeypatch,lambda _:httpx.Response(401,text='synthetic-resend-secret recipient OTP 123456'))
+    transport(monkeypatch,lambda _:httpx.Response(401,json={'name':'validation_error','message':provider_message}))
     response=client.post('/api/auth/register',json={'email':'resend@example.com','password':'synthetic-long-password','display_name':'Synthetic'})
     assert response.status_code==503 and 'SMTP' not in response.text and 'synthetic-resend-secret' not in response.text
     with db.sessions() as s:assert s.scalar(select(PendingSignup)) is None and s.scalar(select(User)) is None
@@ -153,7 +149,9 @@ def test_api_failures_do_not_expose_provider_body_or_account_existence(env,monke
     assert known.status_code==unknown.status_code==200 and known.json()==unknown.json()
     assert 'synthetic-resend-secret' not in caplog.text and '123456' not in caplog.text
     assert 'reason=rejected, provider_status=401' in caplog.text
-    assert 'synthetic-resend-secret recipient OTP 123456' not in caplog.text
+    assert provider_message not in caplog.text
+    assert 'provider_code=validation_error' in caplog.text
+    assert 'safe_summary=' not in caplog.text
     with db.sessions() as s:assert s.scalar(select(PasswordReset)).send_count==1
 
 

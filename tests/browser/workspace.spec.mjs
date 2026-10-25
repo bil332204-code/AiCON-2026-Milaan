@@ -36,7 +36,7 @@ test('saved workspace: reviewed imports, receipt, reconciliation, human decision
   const statement=csv('synthetic-bank.csv','Date,Type,Value,Reference,Person\n2026-10-09T14:00,CREDIT,100,REF-BROWSER,Ali Synthetic');
   await page.locator('[data-upload="statement"]').setInputFiles(statement);
   await expect(page.locator('#preview-summary')).toContainText('1 rejected');
-  for(const [target,source] of Object.entries({posted_at:'date',direction:'type',amount:'value',transaction_id:'reference',counterparty:'person'}))await page.getByLabel('Map '+target,{exact:true}).selectOption(source);
+  for(const [label,source] of Object.entries({'Statement posting time':'date','Credit or debit':'type','Payment amount (PKR)':'value','Transaction ID':'reference','Payer name':'person'}))await page.getByLabel('Map '+label,{exact:true}).selectOption(source);
   await expect(page.locator('#preview-summary')).toContainText('1 accepted · 0 rejected');
   await fs.mkdir('../../docs/screenshots',{recursive:true});
   await page.locator('#preview-summary').scrollIntoViewIfNeeded();
@@ -94,7 +94,7 @@ test('preview errors, duplicate warning and cancellation never save records',asy
   const repeated=csv('repeated-reference.csv','posted_at,direction,amount,transaction_id,counterparty\n2026-10-09T14:00,CREDIT,100,REF123,Ali\n2026-10-09T14:01,CREDIT,100,REF123,Ali');
   await page.locator('[data-upload="statement"]').setInputFiles(repeated);
   await expect(page.locator('#preview-summary')).toContainText('2 accepted · 0 rejected · 1 warnings');
-  await expect(page.locator('#preview-issues')).toContainText('Repeated credit reference');
+  await expect(page.locator('#preview-issues')).toContainText('Repeated credit Transaction ID: matching will require review.');
   await page.keyboard.press('Escape');
   await expect(page.locator('.saved-statement')).toHaveCount(0);
 });

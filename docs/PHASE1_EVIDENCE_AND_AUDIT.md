@@ -1,5 +1,7 @@
 # Milaan Phase 1 — evidence-led implementation and security review
 
+**Continuation:** See [Public launch review](PUBLIC_LAUNCH_REVIEW.md) for the latest fixes, owner-confirmed policy facts, validation and remaining launch gates. The original audit below is historical; its bracketed operator/support placeholders and deferred metadata notes are superseded by that review.
+
 25 October 2026. Scope: guide, Transaction ID, CTA/arrow clarity, public draft trust pages and conservative security improvements. This change is **not** a financial compliance audit or a proof of production email delivery. No production secrets, real seller records or matching decisions were edited.
 
 ## 1. Seller guide — English and Roman Urdu

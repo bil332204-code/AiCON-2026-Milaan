@@ -22,6 +22,7 @@ from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_expor
 from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
 from .middleware import GuardMiddleware, CanonicalOriginMiddleware
 from .jobs import audit, worker_loop
+from .documents import public_document
 
 DUMMY_PASSWORD_HASH = password_hash(secrets.token_urlsafe(32))
 
@@ -327,8 +328,8 @@ def create_app(settings=None):
         except EmailDeliveryError as exc:
             # Fixed categories / status codes only. Do not log PII, provider errors or reset tokens.
             logging.getLogger('milaan.auth').warning(
-                'Password recovery email delivery failed (reason=%s, provider_status=%s, provider_code=%s, field_hint=%s, safe_summary=%s)',
-                exc.category, exc.provider_status, exc.provider_code, exc.field_hint, exc.safe_summary)
+                'Password recovery email delivery failed (reason=%s, provider_status=%s, provider_code=%s, field_hint=%s)',
+                exc.category, exc.provider_status, exc.provider_code, exc.field_hint)
         except Exception:
             logging.getLogger('milaan.auth').warning(
                 'Password recovery email delivery failed (reason=unexpected)')
@@ -694,7 +695,7 @@ def create_app(settings=None):
         own_batch(db, batch_id, user)
         return {"items": [record(e) for e in db.scalars(select(AuditEvent).where(AuditEvent.batch_id == batch_id).order_by(AuditEvent.created_at.desc()).offset(offset).limit(limit))]}
 
-    @app.get('/workspace', include_in_schema=False)
+    @app.api_route('/workspace', methods=['GET', 'HEAD'], include_in_schema=False)
     def protected_workspace(request: Request, db=Depends(get_db)):
         raw = request.cookies.get(settings.cookie_name, '')
         session = db.get(SessionToken, token_digest(raw)) if raw else None
@@ -702,19 +703,30 @@ def create_app(settings=None):
             return RedirectResponse('/login?next=/workspace', status_code=303)
         return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
 
-    @app.get('/privacy', include_in_schema=False)
-    @app.get('/terms', include_in_schema=False)
-    @app.get('/about', include_in_schema=False)
-    def legal_page(request: Request):
+    @app.api_route('/', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/guide', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/privacy', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/terms', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/about', methods=['GET', 'HEAD'], include_in_schema=False)
+    def public_page(request: Request):
         # Only this fixed allowlist can map to a public document, never arbitrary file paths.
-        names = {'/privacy': 'privacy.html', '/terms': 'terms.html', '/about': 'about.html'}
-        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist'/names[request.url.path],
-                            media_type='text/html')
+        return public_document(request.url.path, settings.public_origin)
 
-    @app.get('/login', include_in_schema=False)
-    @app.get('/signup', include_in_schema=False)
-    @app.get('/reset-password', include_in_schema=False)
-    @app.get('/guide', include_in_schema=False)
+    @app.api_route('/index.html', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/privacy.html', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/terms.html', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/about.html', methods=['GET', 'HEAD'], include_in_schema=False)
+    def document_alias(request: Request):
+        paths = {'/index.html': '/', '/privacy.html': '/privacy',
+                 '/terms.html': '/terms', '/about.html': '/about'}
+        target = paths[request.url.path]
+        if request.url.query:
+            target += '?' + request.url.query
+        return RedirectResponse(target, status_code=307)
+
+    @app.api_route('/login', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/signup', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/reset-password', methods=['GET', 'HEAD'], include_in_schema=False)
     def browser_page():
         return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
 
