@@ -1,0 +1,36 @@
+name: Milaan public launch smoke
+on:
+  push:
+    branches: [chore/milaan-public-launch-smoke]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify public HTTPS and authentication boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_public() {
+            local label="$1" url="$2" expected_host="$3"
+            local result
+            result="$(curl --retry 3 --retry-delay 3 --retry-connrefused --max-time 55 -fL -sS -o /dev/null -w '%{http_code}|%{url_effective}|%{ssl_verify_result}' "$url")"
+            IFS='|' read -r code effective tls <<< "$result"
+            echo "$label status=$code effective=$effective ssl_verify_result=$tls"
+            [[ "$code" == "200" && "$tls" == "0" ]]
+            [[ "$effective" == https://* ]]
+            if [[ -n "$expected_host" ]]; then [[ "$effective" == "https://$expected_host"* ]]; fi
+          }
+          check_public "root" "https://milaan.app/" "milaan.app"
+          check_public "www" "https://www.milaan.app/" "milaan.app"
+          check_public "http-to-https" "http://milaan.app/" "milaan.app"
+          check_public "render-fallback" "https://milaan-production-2026.onrender.com/" ""
+          check_public "staging" "https://milaan-neon-stage-2026.onrender.com/" ""
+          auth_code="$(curl --retry 2 --max-time 50 -L -sS -o /dev/null -w '%{http_code}' 'https://milaan.app/api/auth/me')"
+          echo "Anonymous /api/auth/me response=$auth_code"
+          [[ "$auth_code" == "401" ]]
