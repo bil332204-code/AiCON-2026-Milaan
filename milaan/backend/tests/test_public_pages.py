@@ -13,7 +13,8 @@ def test_legal_pages_are_public_and_reachable_without_login(env,route,title):
     response=client.get(route)
     assert response.status_code==200
     assert 'text/html' in response.headers['content-type']
-    assert f'<title>{title} · Milaan</title>' in response.text
+    from html import escape
+    assert f'<title>{escape(title)} · Milaan</title>' in response.text
     assert f'<link rel="canonical" href="https://milaan.app{route}">' in response.text
     assert 'A qualified lawyer should review it' in response.text
     for path in ['/guide','/privacy','/terms','/about']:
