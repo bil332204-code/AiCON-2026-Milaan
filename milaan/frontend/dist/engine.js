@@ -103,7 +103,7 @@ export function decide(results,id,status,lineId,reason){
   }
   return results.map(r=>r.id===id?{...r,status,allocated:status==='ship'?lineId:null,decision:{status,reason:reason.trim(),at:new Date().toISOString()}}:r);
 }
-export function csvCell(v){let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
+export function csvCell(v){let s=String(v??'');if(/^(?:[\t\r]|\s*[=+@-])/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
 export function exportCSV(results,mode){return ['order_ref,customer,amount_pkr,final_status,machine_status,reason,reviewer_reason,statement_line,source',...results.map(r=>[r.id,r.order.name,(r.order.due/100).toFixed(2),r.status,r.machine,r.reason,r.decision?.reason||'',r.allocated||'',mode].map(csvCell).join(','))].join('\r\n');}
 export function receiptHints(text){
   const amount=text.match(/(?:PKR|Rs\.?|amount)\s*[:\s]*([\d,]+(?:\.\d{1,2})?)/i);
