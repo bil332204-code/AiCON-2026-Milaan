@@ -86,7 +86,7 @@ def create_app(settings=None):
         database.engine.dispose()
     app = FastAPI(title="Milaan Backend", version="1.0.0", description="Persistent seller-scoped reconciliation API. Amounts are integer paisa. Times returned as UTC.", lifespan=lifespan)
     app.state.database, app.state.settings, app.state.receipt_storage = database, settings, storage
-    app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing)
+    app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing, production=settings.app_env == 'production')
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"], expose_headers=["Content-Disposition"])
