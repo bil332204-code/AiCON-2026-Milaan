@@ -120,3 +120,28 @@ def test_payment_sent_is_not_successful_without_explicit_provider_confirmation()
     claim.fields['status_text'] = 'Payment sent'
     result = compute_matches([order],[claim],[statement],[credit],set())[0]
     assert (result['final_status'],result['reason_code']) == ('review','STATUS_CONFLICT')
+
+
+@pytest.mark.parametrize('variation', ['fee', 'wrong_receiver', 'outside_24h', 'ref_mismatch'])
+def test_additional_payment_evidence_boundaries_remain_conservative(variation):
+    from datetime import timedelta
+    order, claim, statement, credit = fixtures()
+    if variation == 'fee': credit.amount_paisa = 9500
+    if variation == 'wrong_receiver': claim.account_id = 'another-account'
+    if variation == 'outside_24h': credit.posted_at += timedelta(hours=24, seconds=1)
+    if variation == 'ref_mismatch': credit.transaction_id = 'OTHER99999'
+    verdict = compute_matches([order], [claim], [statement], [credit], set())[0]
+    assert verdict['final_status'] != 'ship'
+
+
+def test_same_amount_with_distinct_transaction_ids_is_not_automatically_a_conflict():
+    order, claim, statement, credit = fixtures()
+    another = NS(**{**vars(credit), 'id': 'separate-credit',
+                    'transaction_id': 'OTHER99999', 'credit_key': 'separate-key'})
+    outcome = compute_matches([order], [claim], [statement], [credit, another], set())[0]
+    assert outcome['final_status'] == 'ship'
+    assert outcome['selected_line_id'] == credit.id
+
+
+def test_midnight_karachi_timezone_normalizes_to_the_same_instant():
+    assert parse_time('2026-10-10T00:01+05:00') == parse_time('2026-10-09T19:01Z')
