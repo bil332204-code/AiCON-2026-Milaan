@@ -202,3 +202,9 @@ Transactional email now uses Resend HTTPS with server-only `RESEND_API_KEY` and
 after authorized live delivery checks; keep `ALLOW_REGISTRATION=false` meanwhile.
 Provider failures never expose response bodies; recovery retains its generic response.
 See [V4 Resend email](../../../docs/V4_RESEND_EMAIL.md).
+
+Production browser documents now redirect safe GET/HEAD requests to PUBLIC_ORIGIN
+and emit canonical Link headers. Auth/workspace documents are marked noindex.
+API calls and health probes are not redirected; ownership, cookies, CORS and CSRF
+continue to enforce their existing rules. See the Issue #8 readiness audit for
+canary checks and unresolved deployment gates.
