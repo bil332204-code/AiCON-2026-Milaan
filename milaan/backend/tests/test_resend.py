@@ -84,6 +84,16 @@ def test_resend_400_exposes_only_fixed_diagnostic_labels(env,monkeypatch):
     assert '123456' not in repr(error.value)
 
 
+def test_sanitized_provider_summary_does_not_log_tokens_or_addresses():
+    response = httpx.Response(400, json={'name': 'validation_error',
+        'message': "Cannot send email with this delivery address user+sample@example.com"})
+    summary = emailer._safe_provider_summary(response)
+    assert 'user+sample' not in summary and 'example.com' not in summary
+    assert '[email]' in summary
+    dangerous = httpx.Response(400,json={'message':'OTP 123456 at https://milaan.app/#token=private'})
+    assert emailer._safe_provider_summary(dangerous)=='redacted'
+
+
 def test_long_rate_limit_does_not_sleep_or_retry(env,monkeypatch):
     calls=[]
     transport(monkeypatch,lambda r:(calls.append(r) or httpx.Response(429,headers={'Retry-After':'60'})))
