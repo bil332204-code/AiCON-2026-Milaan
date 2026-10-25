@@ -8,7 +8,7 @@ async function confirmImport(page) {
 }
 async function login(page) {
   await page.goto('/');
-  await page.locator('.site-header [data-action="workspace"]').click();
+  await page.locator('.hero-actions [data-action="new"]').click();
   await page.locator('#account-email').fill('browser@example.com');
   await page.locator('#account-password').fill('wrong-password');
   await page.locator('#account-submit').click();
