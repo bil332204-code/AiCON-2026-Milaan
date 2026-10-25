@@ -65,6 +65,7 @@ test('guide dialog keeps focus inside until Escape and restores opener focus', a
   await page.locator('.hero-actions [data-action="demo"]').click();
   await expect(page.locator('#workspace')).toBeVisible();
   const opener = page.locator('.app-header [data-action="help"]');
+  await expect(opener).toBeVisible();
   await opener.focus();
   await page.keyboard.press('Enter');
   const guide = page.locator('#help-dialog');
