@@ -1,6 +1,8 @@
 """Transactional mail over Resend HTTPS only. Never log payloads or provider errors."""
 import secrets
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import httpx
 
 RESEND_ENDPOINT = 'https://api.resend.com/emails'
@@ -42,7 +44,13 @@ def _send(settings, recipient, subject, text):
                     # A later user request remains subject to persisted cooldowns.
                     delay = response.headers.get('Retry-After', '.25')
                     try: delay = float(delay)
-                    except ValueError: delay = .25
+                    except ValueError:
+                        try:
+                            date = parsedate_to_datetime(delay)
+                            if date.tzinfo is None: date = date.replace(tzinfo=timezone.utc)
+                            delay = max(0, (date - datetime.now(timezone.utc)).total_seconds())
+                        except (ValueError, TypeError, OverflowError):
+                            delay = 2  # Invalid advice must not trigger an immediate retry.
                     if 0 <= delay <= 1:
                         time.sleep(delay)
                         continue

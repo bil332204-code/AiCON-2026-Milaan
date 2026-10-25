@@ -45,3 +45,41 @@ class GuardMiddleware:
                 return await receive()
             return await self.app(scope, replay, guarded_send)
         return await self.app(scope, receive, guarded_send)
+
+
+class CanonicalOriginMiddleware:
+    """Use the configured public origin for browser documents, never forwarded hosts.
+
+    Redirect only safe document requests. API calls retain their existing authentication
+    and origin checks; never redirect credentials or request bodies across origins.
+    Render health probes remain available independently of their internal Host.
+    """
+    pages = {'/', '/index.html', '/login', '/signup', '/workspace', '/reset-password', '/guide'}
+
+    def __init__(self, app, settings):
+        self.app, self.settings = app, settings
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or self.settings.app_env != 'production':
+            return await self.app(scope, receive, send)
+        from urllib.parse import urlsplit
+        from starlette.responses import RedirectResponse
+        origin = self.settings.public_origin
+        host = dict(scope['headers']).get(b'host', b'').decode('latin-1').lower()
+        canonical = urlsplit(origin).netloc.lower()
+        path, method = scope['path'], scope['method']
+        if path != '/api/health' and host != canonical:
+            if method in {'GET', 'HEAD'} and path in self.pages:
+                query = scope.get('query_string', b'').decode('latin-1')
+                target = origin + ('/' if path == '/index.html' else path)
+                if query: target += '?' + query
+                return await RedirectResponse(target, status_code=307, headers={'Cache-Control':'no-store'})(scope, receive, send)
+        async def canonical_send(message):
+            if message['type'] == 'http.response.start' and path in self.pages:
+                headers = message.setdefault('headers', [])
+                target = origin + ('/' if path == '/index.html' else path)
+                headers.append((b'link', ('<'+target+'>; rel="canonical"').encode('ascii')))
+                if path not in {'/', '/index.html', '/guide'}:
+                    headers.append((b'x-robots-tag',b'noindex, nofollow'))
+            await send(message)
+        await self.app(scope,receive,canonical_send)

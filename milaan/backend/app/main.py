@@ -20,7 +20,7 @@ from .emailer import send_verification, send_password_reset
 from .security import password_hash, verify_password, issue_session, token_digest, csrf_token
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
 from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
-from .middleware import GuardMiddleware
+from .middleware import GuardMiddleware, CanonicalOriginMiddleware
 from .jobs import audit, worker_loop
 
 DUMMY_PASSWORD_HASH = password_hash(secrets.token_urlsafe(32))
@@ -90,6 +90,7 @@ def create_app(settings=None):
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"], expose_headers=["Content-Disposition"])
+    app.add_middleware(CanonicalOriginMiddleware, settings=settings)
     bearer = HTTPBearer(auto_error=False)
 
     @app.exception_handler(RequestValidationError)
