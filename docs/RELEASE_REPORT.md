@@ -1,3 +1,5 @@
+> **Historical report (24 October 2026).** Its “no production deployment” and unverified-provider statements describe that older release session, not the later production launch. See [current operations](OPERATIONS_RUNBOOK.md).
+
 # Release engineering evidence — 24 October 2026
 
 Verdict: **READY FOR REVIEW** for the local kit. No production deployment was made.

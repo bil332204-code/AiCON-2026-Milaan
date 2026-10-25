@@ -1,3 +1,5 @@
+> **Local setup guide.** Live deployment uses the repository's root Dockerfile; see [current release/operations](docs/OPERATIONS_RUNBOOK.md). An authorized STAGING email was delivered in a later test; production email delivery and public signup remain gated. Historical 'no live email' wording below refers to its original test run.
+
 # Milaan + separate demo store
 
 **Canonical local setup entry point.** These root instructions replace older setup instructions inside the inherited folders.

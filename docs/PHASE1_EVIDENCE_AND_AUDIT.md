@@ -1,3 +1,5 @@
+> **Historical phase-1 findings only.** Legal/contact placeholders in the body were superseded by the source-backed draft pages and [public launch review](PUBLIC_LAUNCH_REVIEW.md). Current production remains governed by the [launch gates](PUBLIC_LAUNCH_GATES.md).
+
 # Milaan Phase 1 — evidence-led implementation and security review
 
 **Continuation:** See [Public launch review](PUBLIC_LAUNCH_REVIEW.md) for the latest fixes, owner-confirmed policy facts, validation and remaining launch gates. The original audit below is historical; its bracketed operator/support placeholders and deferred metadata notes are superseded by that review.
