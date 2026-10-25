@@ -71,6 +71,19 @@ def test_provider_errors_are_bounded_and_sanitized(env,monkeypatch,status,body,a
     assert error.value.provider_status == (status if status not in {200} else None)
 
 
+def test_resend_400_exposes_only_fixed_diagnostic_labels(env,monkeypatch):
+    transport(monkeypatch,lambda _:httpx.Response(
+        400,json={'name':'validation_error',
+                  'message':'Invalid `from` address: private-reset-token@example.com OTP 123456'}))
+    with pytest.raises(emailer.EmailDeliveryError) as error:
+        emailer.send_verification(configure(env),'synthetic@example.com','123456')
+    assert error.value.provider_status == 400
+    assert error.value.provider_code == 'validation_error'
+    assert error.value.field_hint == 'from'
+    assert 'private-reset-token' not in str(error.value)
+    assert '123456' not in repr(error.value)
+
+
 def test_long_rate_limit_does_not_sleep_or_retry(env,monkeypatch):
     calls=[]
     transport(monkeypatch,lambda r:(calls.append(r) or httpx.Response(429,headers={'Retry-After':'60'})))
