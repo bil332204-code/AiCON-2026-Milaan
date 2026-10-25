@@ -1,3 +1,5 @@
+> **Historical integration report.** Windows launch was subsequently tested in CI and the Resend HTTPS mail adapter was exercised via a staged inbox test. Earlier “not verified” statements remain dated observations. See [README](README.md).
+
 # Integration report — separate demo kit
 
 ## Completed

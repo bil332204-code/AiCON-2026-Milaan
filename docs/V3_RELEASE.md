@@ -1,3 +1,5 @@
+> **Historical V3 evidence; not current launch status.** The Sites application mentioned below is separate. Current production is deployed from this repository; authentication email now uses Resend HTTPS instead of the historical SMTP path. See [current operations](OPERATIONS_RUNBOOK.md).
+
 # Milaan V3 — cinematic UI and independent authentication
 
 25 October 2026 · `feat/milaan-cinematic-auth` · based on main `3883e9f` (PR #4).

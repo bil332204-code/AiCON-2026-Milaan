@@ -1,3 +1,5 @@
+> **Historical V3 design, superseded for current deployment/email:** See [Operations](OPERATIONS_RUNBOOK.md) and [V4 Resend](V4_RESEND_EMAIL.md). V3 SMTP instructions below do not describe today's production email adapter.
+
 # Deploying the integrated Milaan alternative
 
 > Email update: SMTP instructions below are historical. Use

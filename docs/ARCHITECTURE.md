@@ -1,3 +1,5 @@
+> **Evidence update:** The earlier untested-PostgreSQL statement below is historical: later CI includes isolated PostgreSQL/S3 synthetic integration. See [current operations](OPERATIONS_RUNBOOK.md); hosted database provider behavior is not established by local tests.
+
 # Implemented local architecture
 
 ```mermaid
