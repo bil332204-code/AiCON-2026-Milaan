@@ -132,14 +132,14 @@ def test_secure_cookie_flag_and_production_validation(env):
     import pytest
     for overrides in [{'public_origin':'http://example.com','cookie_secure':True}, {'public_origin':'https://example.com','cookie_secure':False}]:
         with pytest.raises(ValueError): Settings(app_env='production',require_email_verification=True,**overrides)
-    Settings(app_env='production',public_origin='https://example.com',cookie_secure=True,require_email_verification=True)
+    Settings(app_env='production',public_origin='https://example.com',cookie_secure=True,require_email_verification=True, database_url='postgresql://synthetic:unused@db.example.com/test?sslmode=verify-full', migration_database_url='', storage_backend='s3', s3_endpoint_url='https://storage.example.com', s3_bucket='synthetic', s3_region='test', s3_access_key_id='synthetic', s3_secret_access_key='synthetic')
 
 
 def test_real_auth_rate_limit_rejects_sixteenth_request(tmp_path):
     from fastapi.testclient import TestClient
     from app.main import create_app
     from app.models import Base
-    settings=Settings(database_url=f'sqlite:///{tmp_path}/rate.db',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='')
+    settings=Settings(database_url=f'sqlite:///{tmp_path}/rate.db',migration_database_url='',storage_backend='local',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='')
     app=create_app(settings);Base.metadata.create_all(app.state.database.engine)
     with TestClient(app) as client:
         statuses=[client.post('/api/auth/login',json={'email':'missing@example.com','password':'synthetic'}).status_code for _ in range(16)]

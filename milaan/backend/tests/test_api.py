@@ -87,17 +87,17 @@ def test_upload_validation_revision_and_body_limit(env, auth, jpeg):
 def test_deletion_and_retention_remove_private_images(env, auth, jpeg):
     c, db, settings = env
     b, _, claim = load_real_flow(c, auth, jpeg)
-    assert len(list(settings.storage_dir.glob('*.jpg'))) == 1
+    assert len(list(c.app.state.receipt_storage.objects())) == 1
     with db.transaction() as s: s.get(Batch, b['id']).expires_at = now()-timedelta(seconds=1)
     assert c.get('/api/batches/'+b['id'], headers=auth).status_code == 404
     cleanup(db, settings)
-    assert list(settings.storage_dir.glob('*.jpg')) == []
+    assert list(c.app.state.receipt_storage.objects()) == []
     with db.sessions() as s:
         assert s.get(Claim, claim['id']) is None
         assert s.scalar(select(func.count()).select_from(Order)) == 0
     b2, _, _ = load_real_flow(c, auth, jpeg)
     assert c.delete('/api/batches/'+b2['id'], headers=auth).status_code == 204
-    assert list(settings.storage_dir.glob('*.jpg')) == []
+    assert list(c.app.state.receipt_storage.objects()) == []
 
 def test_interrupted_job_recovery_and_mutation_block(env, auth):
     c, db, settings = env

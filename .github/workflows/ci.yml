@@ -5,7 +5,7 @@ permissions:
 jobs:
   local-demo:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       DATABASE_URL: sqlite:////tmp/milaan-ci.db
       STORAGE_DIR: /tmp/milaan-ci-uploads
@@ -25,6 +25,8 @@ jobs:
       - run: python -m alembic upgrade head && python -m alembic check
         working-directory: milaan/backend
       - run: python -m pytest tests/test_store_sync.py tests/test_migrations.py
+      - name: PostgreSQL and private S3 integration (synthetic local services)
+        run: python scripts/test_postgres_s3.py
       - run: python tests/live_demo_check.py
       - run: node --test milaan/frontend/tests/*.test.mjs
       - run: npm --prefix milaan/frontend run check
