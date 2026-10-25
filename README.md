@@ -131,3 +131,15 @@ claims. [Portfolio case study](docs/PORTFOLIO_CASE_STUDY.md).
 Maintained in `bil332204-code/AiCON-2026-Milaan`; consult Git history for contributors.
 Contributions should include synthetic regression cases and preserve the distinction
 between evidence matching, name assistance and optional AI extraction.
+
+### PostgreSQL and private receipts
+
+Production preparation now supports psycopg 3 PostgreSQL runtime pooling, direct
+Alembic migrations and authenticated private S3-compatible receipt storage. SQLite
+and local files remain the default for development. No design or hosted service
+was changed. See [Render/Neon configuration and deployment checklist](docs/RENDER_NEON_READINESS.md)
+and [the secret-free environment template](deploy/render-neon.env.example). Public
+registration stays disabled in that configuration; deployment requires owner approval.
+
+Run `.venv/bin/python scripts/test_postgres_s3.py` for isolated PostgreSQL 17 and
+S3 HTTP integration tests using synthetic data; Docker is required.
