@@ -6,7 +6,7 @@ from sqlalchemy import select, delete
 from .models import Job, Batch, Claim, Order, Statement, StatementLine, Run, Match, Allocation, AuditEvent, SessionToken, PasswordReset, now, uid
 from .matcher import compute_matches, RULES_VERSION
 from .extraction import double_read, ExtractionUnavailable
-from .storage import image_path
+from .storage import receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
 
 log = logging.getLogger("milaan.jobs")
 
@@ -43,10 +43,10 @@ def process_job(database, settings, job_id, lease):
             error = None
             try:
                 if not path: raise ExtractionUnavailable("IMAGE_NOT_AVAILABLE")
-                a, b, checked = double_read(image_path(settings, path).read_bytes(), settings)
+                a, b, checked = double_read(receipt_storage(settings).get(path), settings)
             except ExtractionUnavailable as exc:
                 error = str(exc)
-            except OSError:
+            except (OSError, StorageMissing, StorageUnavailable):
                 error = "IMAGE_NOT_AVAILABLE"
             with database.transaction() as db:
                 job = current_job(db, job_id, lease)
@@ -117,26 +117,32 @@ def run_once(database, settings):
     return True
 
 def cleanup(database, settings):
-    paths = []
+    storage = receipt_storage(settings)
     with database.transaction() as db:
         for batch in db.scalars(select(Batch).where(Batch.expires_at <= now()).with_for_update()):
-            paths += list(db.scalars(select(Claim.image_path).where(Claim.batch_id == batch.id, Claim.image_path.is_not(None))))
+            for key in db.scalars(select(Claim.image_path).where(Claim.batch_id == batch.id, Claim.image_path.is_not(None))):
+                enqueue_deletion(db, storage, key)
             db.delete(batch)
         db.execute(delete(SessionToken).where(SessionToken.expires_at <= now()))
         db.execute(delete(PasswordReset).where(PasswordReset.expires_at <= now(), PasswordReset.window_start < now()-timedelta(hours=1)))
-    for path in paths: image_path(settings, path).unlink(missing_ok=True)
-    # Reap crash-created orphan files only after a grace period.
-    with database.sessions() as db: referenced = set(db.scalars(select(Claim.image_path).where(Claim.image_path.is_not(None))))
-    for file in settings.storage_dir.glob("*.jpg"):
-        if file.name not in referenced and time.time() - file.stat().st_mtime > 3600:
-            file.unlink(missing_ok=True)
+    drain_deletions(database, storage)
+    # Crash-created uploads have no committed Claim. Grace exceeds bounded I/O.
+    # Namespace is dedicated to this deployment; never scan the entire bucket.
+    for key, modified in storage.objects():
+        if modified > now() - timedelta(hours=1): continue
+        with database.transaction() as db:
+            if not db.scalar(select(Claim.id).where(Claim.image_path == key)):
+                enqueue_deletion(db, storage, key)
+    drain_deletions(database, storage)
 
 def worker_loop(database, settings, stop: threading.Event):
     last_cleanup = 0.0
     while not stop.is_set():
         try:
             if time.monotonic() - last_cleanup > 60:
-                cleanup(database, settings); last_cleanup = time.monotonic()
+                last_cleanup = time.monotonic()
+                try: cleanup(database, settings)
+                except Exception: log.error("Retention cleanup failed; durable erasures will retry without blocking jobs")
             if not run_once(database, settings): stop.wait(1)
         except Exception:
             log.error("Worker polling failed; retrying without exposing record data")

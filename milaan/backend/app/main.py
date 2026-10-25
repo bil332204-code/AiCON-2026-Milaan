@@ -19,7 +19,7 @@ from .schemas import ResetRequest, ResetPassword, AllocationPlan, ImportProvenan
 from .emailer import send_verification, send_password_reset
 from .security import password_hash, verify_password, issue_session, token_digest, csrf_token
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
-from .storage import clean_image, image_path
+from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
 from .middleware import GuardMiddleware
 from .jobs import audit, worker_loop
 
@@ -61,11 +61,15 @@ def import_provenance(raw, declared):
 
 def create_app(settings=None):
     settings = settings or Settings()
-    database = Database(settings.database_url)
-    settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    database = Database(settings.database_url, pool_size=settings.database_pool_size, max_overflow=settings.database_max_overflow)
+    storage = receipt_storage(settings)
+    # GuardMiddleware bounds the complete body before multipart parsing. Keep every
+    # accepted upload in RAM: Starlette otherwise spills >1 MiB bank files to /tmp.
+    from starlette.formparsers import MultiPartParser
+    MultiPartParser.spool_max_size = max(MultiPartParser.spool_max_size, settings.max_request_bytes)
     @asynccontextmanager
     async def lifespan(app):
-        if not inspect(database.engine).has_table("users") or not inspect(database.engine).has_table("pending_signups"):
+        if not inspect(database.engine).has_table("users") or not inspect(database.engine).has_table("pending_signups") or not inspect(database.engine).has_table("receipt_deletions"):
             raise RuntimeError("Database is not migrated. Run: python -m alembic upgrade head")
         if not settings.testing and settings.demo_seller_email and settings.demo_seller_password:
             if len(settings.demo_seller_password)<10:raise RuntimeError("Set an admin password of at least 10 characters")
@@ -81,7 +85,7 @@ def create_app(settings=None):
         if thread: thread.join(timeout=3)
         database.engine.dispose()
     app = FastAPI(title="Milaan Backend", version="1.0.0", description="Persistent seller-scoped reconciliation API. Amounts are integer paisa. Times returned as UTC.", lifespan=lifespan)
-    app.state.database, app.state.settings = database, settings
+    app.state.database, app.state.settings, app.state.receipt_storage = database, settings, storage
     app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing)
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -92,6 +96,10 @@ def create_app(settings=None):
     async def invalid(request, exc):
         # Never echo passwords, provider keys or uploaded financial data in error payloads.
         return JSONResponse({"detail": [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]}, 422)
+
+    @app.exception_handler(StorageUnavailable)
+    async def storage_unavailable(request, exc):
+        return JSONResponse({"detail": "Receipt storage temporarily unavailable; retry later"}, 503)
 
     @app.exception_handler(IntegrityError)
     async def integrity(request, exc):
@@ -386,8 +394,9 @@ def create_app(settings=None):
     def delete_batch(batch_id: str, user=Depends(current_user), db=Depends(get_db)):
         batch = own_batch(db, batch_id, user, True)
         paths = list(db.scalars(select(Claim.image_path).where(Claim.batch_id == batch_id, Claim.image_path.is_not(None))))
+        for path in paths: enqueue_deletion(db, storage, path)
         db.delete(batch); db.commit()
-        for path in paths: image_path(settings, path).unlink(missing_ok=True)
+        drain_deletions(database, storage, limit=1)
         return Response(status_code=204)
 
     @app.post("/api/batches/{batch_id}/reset", tags=["batches"])
@@ -508,22 +517,28 @@ def create_app(settings=None):
         if db.scalar(select(func.count()).select_from(Claim).where(Claim.batch_id == b.id)) >= settings.max_claims: raise HTTPException(409, "Screenshot limit reached")
         try: cleaned, digest = clean_image(await file.read())
         except ValueError as e: raise HTTPException(422, str(e))
-        claim_id = uid(); filename = claim_id + ".jpg"; path = image_path(settings, filename)
+        claim_id = uid(); filename = claim_id + ".jpg"
         c = Claim(id=claim_id, batch_id=b.id, order_id=order.id, account_id=order.account_id,
                   filename=Path(file.filename or "receipt.jpg").name[:200], sha256=digest, image_path=filename)
         try:
-            path.write_bytes(cleaned); db.add(c); b.revision += 1
+            storage.put(filename, cleaned); db.add(c); b.revision += 1
             audit(db, b.id, user.id, "claim_uploaded", {"claim_id": c.id})
             db.commit()
         except Exception:
-            path.unlink(missing_ok=True); raise
+            db.rollback()
+            # Even a timed-out PUT may have succeeded. Retry erasure durably.
+            with database.transaction() as deletion_db: enqueue_deletion(deletion_db, storage, filename)
+            drain_deletions(database, storage, limit=1)
+            raise
         return {"batch": record(b), "claim": claim_record(c)}
 
     @app.get("/api/claims/{claim_id}/image", tags=["claims"])
     def image(claim_id: str, user=Depends(current_user), db=Depends(get_db)):
         c, _ = own_claim(db, claim_id, user)
-        if not c.image_path or not image_path(settings, c.image_path).exists(): raise HTTPException(404, "Image not available")
-        return FileResponse(image_path(settings, c.image_path), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        if not c.image_path: raise HTTPException(404, "Image not available")
+        try: data = storage.get(c.image_path)
+        except StorageMissing: raise HTTPException(404, "Image not available")
+        return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
     @app.patch("/api/claims/{claim_id}", tags=["claims"])
     def update_claim(claim_id: str, body: ClaimUpdate, user=Depends(current_user), db=Depends(get_db)):
@@ -546,8 +561,9 @@ def create_app(settings=None):
         db.refresh(c)
         if c.version != expected_version: raise HTTPException(409, "Claim version changed")
         path = c.image_path; db.delete(c); b.revision += 1; audit(db, b.id, user.id, "claim_removed", {"claim_id": claim_id})
+        if path: enqueue_deletion(db, storage, path)
         db.commit()
-        if path: image_path(settings, path).unlink(missing_ok=True)
+        drain_deletions(database, storage, limit=1)
         return {"batch": record(b)}
 
     @app.post("/api/claims/{claim_id}/retry-extraction", tags=["claims"])
