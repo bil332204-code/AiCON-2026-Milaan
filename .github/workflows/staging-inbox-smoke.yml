@@ -1,0 +1,32 @@
+name: One-time Milaan staging email delivery test
+on:
+  push:
+    branches: [test/milaan-staging-inbox-20261025]
+
+permissions:
+  contents: read
+
+jobs:
+  staging-reset-request:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Request password reset for the owner's existing synthetic staging account
+        shell: bash
+        env:
+          OWNER_HANDLE: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          # Staging has an intentionally synthetic, verified account for this mailbox.
+          # No reset token, provider key or address is printed to CI logs.
+          recipient="${OWNER_HANDLE%-code}@gmail.com"
+          payload="$(printf '{"email":"%s"}' "$recipient")"
+          http_code="$(curl --connect-timeout 12 --max-time 80 -sS -o /tmp/milaan-staging-reset-response.json -w '%{http_code}' \
+            -X POST 'https://milaan-neon-stage-2026.onrender.com/api/auth/request-password-reset' \
+            -H 'Origin: https://milaan-neon-stage-2026.onrender.com' \
+            -H 'Content-Type: application/json' --data-raw "$payload")"
+          echo "Staging request returned HTTP ${http_code}"
+          test "$http_code" = 200
+          grep -qi 'check your inbox' /tmp/milaan-staging-reset-response.json
+          rm -f /tmp/milaan-staging-reset-response.json
+          echo "Request accepted; actual delivery must be checked in the owner's inbox."
