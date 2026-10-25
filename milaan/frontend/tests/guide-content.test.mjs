@@ -38,6 +38,8 @@ test('landing explains transaction reference source without inventing Milaan ID 
 test('private beta stays honest without removing the anonymous demo or weakening SHIP terms',()=>{
   const code=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');
   assert.match(code,/Private beta · Existing accounts only/);
+  assert.match(code,/if\(action==='new'\)\{if\(privateBeta\(\)&&!backend\.api\.authenticated\)/);
+  assert.match(code,/if\(await existingAccountGate\(\)\)return backend\.open\(\)/);
   assert.match(code,/new signup is closed/);
   assert.match(entry,/data-action="demo"/);
   assert.match(entry,/Statement CSV help/);
