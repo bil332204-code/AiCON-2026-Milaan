@@ -31,6 +31,5 @@ def public_document(path, origin, registration_open=True):
                 f'<meta property="og:title" content="{escape(title, quote=True)}">\n'
                 f'<meta property="og:description" content="{description}">\n'
                 '<meta property="og:type" content="website">\n')
-    metadata += '<meta name="milaan-registration-state" content="' + ('open' if registration_open else 'closed') + '">
-'
+    metadata += '<meta name="milaan-registration-state" content="' + ('open' if registration_open else 'closed') + '">\n'
     return HTMLResponse(content.replace('</head>', metadata + '</head>', 1))
