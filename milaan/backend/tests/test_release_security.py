@@ -25,7 +25,7 @@ def test_receipt_image_is_reencoded_without_private_exif():
     exif = Image.Exif()
     exif[0x010E] = "SYNTHETIC PRIVATE METADATA"
     image.save(original, 'JPEG', exif=exif)
-    cleaned = clean_image(original.getvalue())
+    cleaned, _digest = clean_image(original.getvalue())
     with Image.open(io.BytesIO(cleaned)) as result:
         assert result.format == 'JPEG'
         assert not result.getexif()
@@ -34,7 +34,7 @@ def test_receipt_image_is_reencoded_without_private_exif():
 
 def test_non_ascii_csrf_header_denied_with_403(env):
     _, _, settings = env
-    fake = SimpleNamespace(headers={'origin': settings.public_origin, 'x-csrf-token': 'é'})
+    fake = SimpleNamespace(headers={'origin': settings.public_origin, 'x-csrf-token': 'é'}, base_url=settings.public_origin+'/')
     try:
         check_csrf(fake, settings, 'synthetic-token')
         raise AssertionError('Nonmatching CSRF cannot be accepted')
