@@ -2,10 +2,10 @@ const canvas=document.getElementById('orb-canvas'),ctx=canvas.getContext('2d'),a
 const media=matchMedia('(prefers-reduced-motion: reduce)');
 const economical=matchMedia('(max-width: 760px)').matches || navigator.connection?.saveData===true;
 let paused=media.matches,visible=true,frame=0,t=0,last=0,w=500,h=540,px=0,py=0;
-try{if(sessionStorage.getItem('milaan-motion')==='off')paused=true;}catch{}
+try{const choice=localStorage.getItem('milaan-motion');if(choice==='on'||choice==='off')paused=choice==='off';}catch{}
 function motion(){document.body.classList.toggle('motion-paused',paused);button.setAttribute('aria-pressed',String(paused));button.setAttribute('aria-label',paused?'Resume animation':'Pause animation');button.querySelector('.motion-text').textContent=paused?'Motion off':'Motion on';if(paused)cancelAnimationFrame(frame);draw();if(!paused)start();}
-button.addEventListener('click',()=>{paused=!paused;try{sessionStorage.setItem('milaan-motion',paused?'off':'on');}catch{}motion();});
-media.addEventListener('change',()=>{paused=media.matches;motion();});
+button.addEventListener('click',()=>{paused=!paused;try{localStorage.setItem('milaan-motion',paused?'off':'on');}catch{}motion();});
+media.addEventListener('change',()=>{let choice=null;try{choice=localStorage.getItem('milaan-motion');}catch{}if(choice!=='off'&&choice!=='on')paused=media.matches;motion();});
 function resize(){if(!ctx)return;const r=art.getBoundingClientRect();if(r.width<1)return;w=r.width;h=r.height;const dpr=Math.min(devicePixelRatio||1,economical?1.5:2);canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);canvas.style.width=w+'px';canvas.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
 function project(x,y,z,a,b){let xx=x*Math.cos(a)+z*Math.sin(a),zz=-x*Math.sin(a)+z*Math.cos(a),yy=y*Math.cos(b)-zz*Math.sin(b);zz=y*Math.sin(b)+zz*Math.cos(b);const f=550/(550+zz);return {x:w*.52+xx*f,y:h*.49+yy*f,z:zz,f};}
 function draw(){
