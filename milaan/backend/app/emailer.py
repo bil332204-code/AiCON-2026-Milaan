@@ -9,8 +9,10 @@ RESEND_ENDPOINT = 'https://api.resend.com/emails'
 
 
 class EmailDeliveryError(RuntimeError):
-    def __init__(self, category):
+    def __init__(self, category, provider_status=None):
         self.category = category
+        # Only numeric HTTP status, never the provider's response body, recipients, or credentials.
+        self.provider_status = provider_status
         super().__init__('Transactional email delivery failed')
 
 
@@ -54,9 +56,9 @@ def _send(settings, recipient, subject, text):
                     if 0 <= delay <= 1:
                         time.sleep(delay)
                         continue
-                raise EmailDeliveryError('unavailable')
+                raise EmailDeliveryError('unavailable', response.status_code)
             if response.status_code not in {200, 201}:
-                raise EmailDeliveryError('rejected')
+                raise EmailDeliveryError('rejected', response.status_code)
             try: message_id = response.json().get('id')
             except (ValueError, AttributeError): message_id = None
             if not isinstance(message_id, str) or not message_id or len(message_id) > 128:

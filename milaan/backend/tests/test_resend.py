@@ -68,6 +68,7 @@ def test_provider_errors_are_bounded_and_sanitized(env,monkeypatch,status,body,a
         emailer.send_verification(configure(env),'synthetic@example.com','123456')
     assert len(requests)==attempts
     assert str(error.value)=='Transactional email delivery failed'
+    assert error.value.provider_status == (status if status not in {200} else None)
 
 
 def test_long_rate_limit_does_not_sleep_or_retry(env,monkeypatch):
@@ -128,6 +129,8 @@ def test_api_failures_do_not_expose_provider_body_or_account_existence(env,monke
     unknown=client.post('/api/auth/request-password-reset',json={'email':'unknown@example.com'})
     assert known.status_code==unknown.status_code==200 and known.json()==unknown.json()
     assert 'synthetic-resend-secret' not in caplog.text and '123456' not in caplog.text
+    assert 'reason=rejected, provider_status=401' in caplog.text
+    assert 'synthetic-resend-secret recipient OTP 123456' not in caplog.text
     with db.sessions() as s:assert s.scalar(select(PasswordReset)).send_count==1
 
 
