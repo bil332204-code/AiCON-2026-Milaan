@@ -16,7 +16,7 @@ Milaan is the receipt / statement checker. The demo shop is a separate app, data
 
 After the first setup, only run START_DEMO.bat. To stop, press Ctrl+C in both server windows.
 
-**Python:** API tests were run on Python 3.12.14 on Linux. Python 3.13 is targeted by the Windows setup but has not been executed here; Windows launch scripts have also not been executed here. Prefer Python 3.12 to create `.venv`, then rerun SETUP.bat.
+**Python:** API tests were run on Python 3.12.14 on Linux. Python 3.13 has not been executed here. `SETUP.bat` and `START_DEMO.bat` were exercised on a real `windows-latest` runner with Python 3.12 and synthetic preconfigured operator: Milaan and the demo store both returned HTTP 200. Interactive operator entry and desktop GUI were not tested. Prefer Python 3.12 to create `.venv`, then rerun SETUP.bat.
 
 ## Gemini (optional receipt reading)
 
@@ -67,8 +67,9 @@ No Node build or third frontend server is needed. Keep `.env` private. This kit 
 Run all root commands from the cloned repository, not the inherited backend folder.
 Python 3.12 virtual environment creation, pinned installation, SQLite migrations,
 both application launches and synthetic HTTP workflows were executed on Linux.
-The interactive operator prompt, Windows batch files and Python 3.13 were not
-executed in this release pass. Automated operator startup and login use isolated
+The interactive operator prompt and Python 3.13 were not executed in this
+release pass. Root Windows batch startup was verified on a Windows Actions
+runner with a synthetic operator. See `windows-secrets-audit.yml`. Automated operator startup and login use isolated
 synthetic test credentials, never a shared account for ongoing use.
 
 If a command reports a missing module, use the root `.venv/bin/python` explicitly

@@ -4,6 +4,22 @@ async function mail(kind,email){
  let value;await expect.poll(async()=>{const text=await fs.readFile('/tmp/milaan-browser-test-outbox.jsonl','utf8').catch(()=> '');value=text.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line)).filter(item=>item.kind===kind&&item.email===email).at(-1)?.value;return !!value;}).toBe(true);return value;
 }
 const password='synthetic-v3-long-passphrase';
+
+test('reset dialog does not steal focus when rendering resumes', async ({page}) => {
+ await page.addInitScript(() => {
+   const frames = [];
+   window.requestAnimationFrame = callback => frames.push(callback);
+   window.resumeTestFrames = () => {
+     for (const callback of frames.splice(0)) callback(performance.now());
+   };
+ });
+ await page.goto('/reset-password#token='+'x'.repeat(64));
+ await expect(page.locator('#account-heading')).toHaveText('A fresh start.');
+ await page.locator('#account-confirm').focus();
+ await page.evaluate(() => window.resumeTestFrames());
+ await expect(page.locator('#account-confirm')).toBeFocused();
+});
+
 async function signup(page,email){
  await page.goto('/signup');await expect(page.locator('#account-dialog')).toBeVisible();
  await page.locator('#account-name').fill('Synthetic V3 Seller');await page.locator('#account-email').fill(email);
@@ -74,7 +90,7 @@ test('cinematic landing is accessible, reduced-motion safe and fits small and ta
  await expect(page.locator('.ambient-mesh')).toHaveCount(1);
  expect(await page.locator('.ambient-orb').first().evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
  expect(await page.locator('.headline-word').first().evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
- for(const width of [320,768]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.getByRole('button',{name:'Use your own files'}).click();await expect(page.locator('#account-dialog')).toBeVisible();expect(await page.locator('#account-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.locator('[data-account-close]').click();}
+ for(const width of [320,768]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('.hero-actions [data-action="new"]').click();await expect(page.locator('#account-dialog')).toBeVisible();expect(await page.locator('#account-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.locator('[data-account-close]').click();}
  const metrics=await page.evaluate(()=>({navigationMs:Math.round(performance.getEntriesByType('navigation')[0].duration),domNodes:document.querySelectorAll('*').length,resourceBytes:performance.getEntriesByType('resource').reduce((sum,r)=>sum+(r.transferSize||0),0)}));
  await fs.writeFile(`../../docs/screenshots/v3-performance-${info.project.name}.json`,JSON.stringify(metrics,null,2)+'\n');
  await test.info().attach('local-performance-observation',{body:JSON.stringify(metrics,null,2),contentType:'application/json'});

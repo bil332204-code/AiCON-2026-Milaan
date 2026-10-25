@@ -5,15 +5,25 @@ and receiving-bank exports, producing explainable **SHIP / HOLD / REVIEW**
 recommendations. These are operational recommendations based on supplied evidence;
 they do not independently confirm bank settlement or execute payments or shipping.
 
-[Hosted workspace](https://milaan-studio.bil332204.chatgpt.site/workspace) ·
-[Hosted guide](https://milaan-studio.bil332204.chatgpt.site/guide) ·
+[Production site: milaan.app](https://milaan.app) ·
+[Separate ChatGPT Sites workspace](https://milaan-studio.bil332204.chatgpt.site/workspace) ·
+[Separate ChatGPT Sites guide](https://milaan-studio.bil332204.chatgpt.site/guide) ·
 [Portfolio](https://bilal-ahmed-builds.cyou/projects/milaan)
 
-## Hosted workspace versus this repository
+## Which website deploys from this repository?
 
-The Sites application is separately maintained. Hosted capabilities below are
-previously documented claims, **not independently verified in this release pass**.
-Changing this repository does not update that application.
+**milaan.app is served from this GitHub repository**, deployed by the separate
+Render service `milaan-production-2026`: branch `main`, repository-root
+`Dockerfile`, custom domain `milaan.app`. This deployment mapping was
+verified against the Render service configuration on 2026-10-25.
+Editing another branch or an unmerged PR does not change the production site;
+the Render production service currently has automatic deployments disabled.
+
+The older `milaan-studio.bil332204.chatgpt.site` application is a **distinct,
+separately maintained ChatGPT Sites workspace**. Editing this repo does not update
+that Sites app. The capability comparison below refers to the separate Sites
+workspace; its behavior is previously documented but **not independently
+verified** in this release pass.
 
 | Capability | Hosted workspace (unverified claims) | GitHub local kit (source and local tests) |
 |---|---|---|
@@ -62,7 +72,7 @@ cd milaan/backend
 In another terminal, from `demo-store`, run
 `../.venv/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8090`.
 Use your configured operator in both applications. No Node build is required.
-Python 3.13 and Windows execution remain unverified.
+Python 3.13 remains unverified. Root Windows `SETUP.bat` and `START_DEMO.bat` were exercised on `windows-latest` with Python 3.12 and a preconfigured synthetic operator (both localhost services returned HTTP 200); the interactive operator prompt was not tested. See [Windows CI evidence](https://github.com/bil332204-code/AiCON-2026-Milaan/actions/runs/40202954091).
 
 ## Demonstration scenarios
 

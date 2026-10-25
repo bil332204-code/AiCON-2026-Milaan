@@ -1,5 +1,12 @@
 import {parseCSV,paisa,timestamp,normRef} from './engine.js';
 
+const fieldLabel=field=>({
+  order_ref:'Order number', customer_name:'Customer name', amount_due:'Order total (PKR)',
+  account_id:'Receiving account ID', posted_at:'Statement posting time', direction:'Credit or debit',
+  amount:'Payment amount (PKR)', counterparty:'Payer name', transaction_id:'Transaction ID',
+  currency:'Currency'
+})[field]||field;
+
 export const fieldsFor=kind=>kind==='orders'?['order_ref','customer_name','amount_due','account_id','currency']:['posted_at','direction','amount','counterparty','transaction_id','account_id','currency'];
 const quote=value=>'"'+String(value??'').replaceAll('"','""')+'"';
 export const encodeCSV=(fields,rows)=>[fields,...rows.map(r=>fields.map(f=>r[f]??''))].map(row=>row.map(quote).join(',')).join('\r\n');
@@ -16,7 +23,7 @@ export function previewImport(text,kind,mapping,options={}) {
     try {
       const required=kind==='orders'?['order_ref','customer_name','amount_due','account_id']:['posted_at','direction','amount','account_id'];
       for(const f of required)if(!row[f])throw Error(`${f}: required value or mapping missing.`);
-      if(!mapping.transaction_id&&kind==='statement')throw Error('transaction_id: map the reference column (blank source values remain blank).');
+      if(!mapping.transaction_id&&kind==='statement')throw Error('Transaction ID: map the payment ID column (blank source values remain blank).');
       if(row.currency!=='PKR')throw Error('currency: only PKR is supported.');
       if(row.account_id.length>100)throw Error('account_id: maximum 100 characters.');
       if(kind==='orders') {
@@ -40,10 +47,10 @@ export function previewImport(text,kind,mapping,options={}) {
         const key=JSON.stringify([row.account_id,at,row.direction,amount,normRef(row.transaction_id),row.counterparty]);
         if(seen.has(key))throw Error('duplicate transaction record; correct the source before saving.');
         seen.add(key);
-        if(options.local&&!row.transaction_id)throw Error('transaction_id: browser-local mode requires a reference; use saved mode for incomplete evidence.');
-        if(!row.transaction_id)warnings.push({record,message:'Blank reference: retained as incomplete evidence; no reference is invented.'});
+        if(options.local&&!row.transaction_id)throw Error('Transaction ID: browser-local mode requires a payment ID; use saved mode for incomplete evidence.');
+        if(!row.transaction_id)warnings.push({record,message:'Blank Transaction ID: retained as incomplete evidence; no Transaction ID is invented.'});
         const ref=row.account_id+'|'+normRef(row.transaction_id);
-        if(row.direction==='CREDIT'&&row.transaction_id&&refs.has(ref))warnings.push({record,message:'Repeated credit reference: matching will require review.'});
+        if(row.direction==='CREDIT'&&row.transaction_id&&refs.has(ref))warnings.push({record,message:'Repeated credit Transaction ID: matching will require review.'});
         if(row.direction==='CREDIT'&&row.transaction_id)refs.add(ref);
       }
       rows.push(row);
@@ -63,7 +70,7 @@ export async function reviewImport(file,kind,options={}) {
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
   const source=parseCSV(text),headers=Object.keys(source[0]),fields=fieldsFor(kind);
   const dialog=document.createElement('dialog');dialog.className='import-preview';dialog.setAttribute('aria-labelledby','preview-title');
-  dialog.innerHTML=`<h2 id="preview-title">Review ${kind} import</h2><p>${esc(file.name)} · ${source.length} records. Map columns, inspect all errors, then confirm. Nothing has been saved.</p><p>Use normalized ISO timestamps and positive PKR amounts. No PDF or AI processing occurs here.</p><div class="preview-mapping">${fields.map(field=>`<label class="field">${field}<select data-map="${field}" aria-label="Map ${field}"><option value="">${field==='account_id'&&options.account?'Use declared account':'Not mapped'}</option>${headers.map(header=>`<option value="${esc(header)}" ${header===field?'selected':''}>${esc(header)}</option>`).join('')}</select></label>`).join('')}</div>${kind==='statement'?`<label class="field">Timezone for source timestamps without an offset<select id="preview-timezone"><option value="+05:00">Asia/Karachi (UTC+05:00)</option><option value="Z">UTC</option></select></label><p>Existing explicit offsets are preserved. Coverage remains the period you declared in Pakistan time.</p>`:''}<div id="preview-summary" role="status" aria-live="polite"></div><div id="preview-issues"></div><div class="preview-table" tabindex="0" aria-label="Normalized record preview"></div><p>Showing up to 20 records; every record is validated. Rejected rows block the entire import; no rows are silently discarded.</p><label class="checkbox-row"><input type="checkbox" id="preview-confirm"><span>I reviewed the mapped evidence${kind==='statement'?' and the declared statement coverage':''}. Save only these reviewed records.</span></label><div class="preview-actions"><button type="button" class="btn btn-outline" id="preview-cancel">Cancel import</button><button type="button" class="btn btn-forest" id="preview-save" disabled>Save reviewed import</button></div>`;
+  dialog.innerHTML=`<h2 id="preview-title">Review ${kind} import</h2><p>${esc(file.name)} · ${source.length} records. Map columns, inspect all errors, then confirm. Nothing has been saved.</p><p>Use normalized ISO timestamps and positive PKR amounts. No PDF or AI processing occurs here.</p><div class="preview-mapping">${fields.map(field=>`<label class="field">${fieldLabel(field)}<select data-map="${field}" aria-label="Map ${fieldLabel(field)}"><option value="">${field==='account_id'&&options.account?'Use declared account':'Not mapped'}</option>${headers.map(header=>`<option value="${esc(header)}" ${header===field?'selected':''}>${esc(header)}</option>`).join('')}</select></label>`).join('')}</div>${kind==='statement'?`<label class="field">Timezone for source timestamps without an offset<select id="preview-timezone"><option value="+05:00">Asia/Karachi (UTC+05:00)</option><option value="Z">UTC</option></select></label><p>Existing explicit offsets are preserved. Coverage remains the period you declared in Pakistan time.</p>`:''}<div id="preview-summary" role="status" aria-live="polite"></div><div id="preview-issues"></div><div class="preview-table" tabindex="0" aria-label="Normalized record preview"></div><p>Showing up to 20 records; every record is validated. Rejected rows block the entire import; no rows are silently discarded.</p><label class="checkbox-row"><input type="checkbox" id="preview-confirm"><span>I reviewed the mapped evidence${kind==='statement'?' and the declared statement coverage':''}. Save only these reviewed records.</span></label><div class="preview-actions"><button type="button" class="btn btn-outline" id="preview-cancel">Cancel import</button><button type="button" class="btn btn-forest" id="preview-save" disabled>Save reviewed import</button></div>`;
   document.body.append(dialog);
   const $=selector=>dialog.querySelector(selector);let preview,mapping;
   function update() {

@@ -9,3 +9,39 @@ node_modules/
 test-results/
 playwright-report/
 .env.production
+
+# Local and hosted runtime credentials (keep the sample templates trackable)
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Runtime databases and related SQLite sidecars
+*.sqlite
+*.sqlite3
+*.db3
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+
+# Private uploads / exports and backups (not source-controlled fixtures)
+/uploads/
+/receipts/
+/exports/
+/backups/
+**/private-uploads/
+*.bak
+
+# Reports and machine-specific files
+*.log
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db

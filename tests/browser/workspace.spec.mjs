@@ -8,7 +8,7 @@ async function confirmImport(page) {
 }
 async function login(page) {
   await page.goto('/');
-  await page.getByRole('button',{name:'Use your own files'}).click();
+  await page.locator('.hero-actions [data-action="new"]').click();
   await page.locator('#account-email').fill('browser@example.com');
   await page.locator('#account-password').fill('wrong-password');
   await page.locator('#account-submit').click();
@@ -36,7 +36,7 @@ test('saved workspace: reviewed imports, receipt, reconciliation, human decision
   const statement=csv('synthetic-bank.csv','Date,Type,Value,Reference,Person\n2026-10-09T14:00,CREDIT,100,REF-BROWSER,Ali Synthetic');
   await page.locator('[data-upload="statement"]').setInputFiles(statement);
   await expect(page.locator('#preview-summary')).toContainText('1 rejected');
-  for(const [target,source] of Object.entries({posted_at:'date',direction:'type',amount:'value',transaction_id:'reference',counterparty:'person'}))await page.getByLabel('Map '+target,{exact:true}).selectOption(source);
+  for(const [label,source] of Object.entries({'Statement posting time':'date','Credit or debit':'type','Payment amount (PKR)':'value','Transaction ID':'reference','Payer name':'person'}))await page.getByLabel('Map '+label,{exact:true}).selectOption(source);
   await expect(page.locator('#preview-summary')).toContainText('1 accepted · 0 rejected');
   await fs.mkdir('../../docs/screenshots',{recursive:true});
   await page.locator('#preview-summary').scrollIntoViewIfNeeded();
@@ -94,7 +94,7 @@ test('preview errors, duplicate warning and cancellation never save records',asy
   const repeated=csv('repeated-reference.csv','posted_at,direction,amount,transaction_id,counterparty\n2026-10-09T14:00,CREDIT,100,REF123,Ali\n2026-10-09T14:01,CREDIT,100,REF123,Ali');
   await page.locator('[data-upload="statement"]').setInputFiles(repeated);
   await expect(page.locator('#preview-summary')).toContainText('2 accepted · 0 rejected · 1 warnings');
-  await expect(page.locator('#preview-issues')).toContainText('Repeated credit reference');
+  await expect(page.locator('#preview-issues')).toContainText('Repeated credit Transaction ID: matching will require review.');
   await page.keyboard.press('Escape');
   await expect(page.locator('.saved-statement')).toHaveCount(0);
 });
@@ -117,7 +117,7 @@ test('combined payment shares require explicit review and persist without double
   const checked=await request.patch(`/api/claims/${claim.id}`,{headers,data:{expected_version:claim.version,confirmed:true,fields:{is_payment_receipt:true,amount_pkr:'150',datetime_local:'2026-10-09T14:00',transaction_id:reference,status_text:'Successful'}}});expect(checked.ok(),await checked.text()).toBeTruthy();
   const jobResponse=await request.post(`/api/batches/${batch.id}/reconcile`,{headers:{...headers,'Idempotency-Key':'browser-combined-run'}});expect(jobResponse.ok()).toBeTruthy();const job=await jobResponse.json();
   await expect.poll(async()=>{const r=await request.get(`/api/jobs/${job.id}`,{headers});return (await r.json()).status;}).toBe('done');
-  await page.goto('/');await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+  await page.goto('/');await page.locator('.site-header [data-action="workspace"]').click();
   await page.locator('#account-email').fill('browser@example.com');await page.locator('#account-password').fill('synthetic-browser-test-password');await page.locator('#account-submit').click();
   await page.locator(`[data-batch-id="${batch.id}"]`).click();
   await expect(page.locator('#results-body .pill.review')).toHaveCount(2);

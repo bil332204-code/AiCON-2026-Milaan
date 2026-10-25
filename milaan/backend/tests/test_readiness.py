@@ -29,7 +29,7 @@ def test_resend_respects_date_or_invalid_retry_advice(env,monkeypatch,advice):
 def test_canonical_documents_and_reset_links_use_trusted_origin(env):
     client,_,settings=env
     settings.app_env='production';settings.public_origin='https://milaan.example.com'
-    for path in ['/', '/guide', '/login', '/signup', '/workspace', '/reset-password']:
+    for path in ['/', '/guide', '/login', '/signup', '/workspace', '/reset-password', '/privacy', '/terms', '/about']:
         response=client.get('https://www.milaan.example.com'+path+'?next=%2Fworkspace',follow_redirects=False,
                             headers={'X-Forwarded-Host':'evil.example.com'})
         assert response.status_code==307
@@ -65,3 +65,39 @@ def test_oversized_statement_amount_fails_without_mutation(env,auth):
         'coverage_start':'2026-10-09T00:00:00+05:00','coverage_end':'2026-10-10T00:00:00+05:00'})
     assert response.status_code==422
     assert client.get('/api/batches/'+batch['id']+'/statements',headers=auth).json()['items']==[]
+
+
+def test_public_legal_pages_have_correct_canonical_and_are_indexable(env):
+    client,_,settings=env
+    settings.app_env='production'
+    settings.public_origin='https://milaan.app'
+    for path in ['/privacy','/terms','/about']:
+        response=client.get('https://milaan.app'+path)
+        assert response.status_code==200
+        assert response.headers['link']==f'<https://milaan.app{path}>; rel="canonical"'
+        assert 'x-robots-tag' not in response.headers
+        redirect=client.get('https://www.milaan.app'+path,follow_redirects=False)
+        assert redirect.status_code==307
+        assert redirect.headers['location']=='https://milaan.app'+path
+
+
+def test_production_security_headers_without_pretending_full_csp_coverage():
+    import asyncio
+    from app.middleware import GuardMiddleware
+
+    async def backend(scope,receive,send):
+        await send({'type':'http.response.start','status':200,'headers':[]})
+        await send({'type':'http.response.body','body':b'ok'})
+    async def once(production):
+        result=[]
+        async def send(item):result.append(item)
+        async def receive():return {'type':'http.request','body':b'','more_body':False}
+        mw=GuardMiddleware(backend, limit=1024,testing=True,production=production)
+        await mw({'type':'http','method':'GET','path':'/','client':('127.0.0.1',1234),'headers':[]},receive,send)
+        return dict(result[0]['headers'])
+    production=asyncio.run(once(True))
+    assert production[b'strict-transport-security']==b'max-age=31536000'
+    assert production[b'x-frame-options']==b'DENY'
+    assert production[b'x-content-type-options']==b'nosniff'
+    assert production[b'referrer-policy']==b'no-referrer'
+    assert b'strict-transport-security' not in asyncio.run(once(False))

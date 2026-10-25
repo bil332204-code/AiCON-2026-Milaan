@@ -1,0 +1,4 @@
+# Reviewed false positive: synthetic browser-test password committed on 2026-10-24.
+# Scope is ONE finding fingerprint, not a path, rule or pattern-wide exemption.
+# Any newly introduced real credential must still fail the full-history scan.
+8bbbcf559446c07806a89eb9b5d28f031c6744f8:tests/browser/auth-visual.spec.mjs:generic-api-key:6

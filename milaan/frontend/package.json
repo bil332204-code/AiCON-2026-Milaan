@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check dist/app.js && node --check dist/engine.js && node --check dist/scene.js && node --check dist/backend-ui.js && node --check dist/remote-state.js && node --check dist/milaan-api.js && node --check dist/import-preview.js && node --check dist/allocation-ui.js && node --check dist/cinematic.js"
+    "check": "node --check dist/app.js && node --check dist/engine.js && node --check dist/scene.js && node --check dist/backend-ui.js && node --check dist/remote-state.js && node --check dist/milaan-api.js && node --check dist/import-preview.js && node --check dist/allocation-ui.js && node --check dist/cinematic.js && node --check dist/guide.js"
   }
 }
