@@ -72,7 +72,7 @@ cd milaan/backend
 In another terminal, from `demo-store`, run
 `../.venv/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8090`.
 Use your configured operator in both applications. No Node build is required.
-Python 3.13 and Windows execution remain unverified.
+Python 3.13 remains unverified. Root Windows `SETUP.bat` and `START_DEMO.bat` were exercised on `windows-latest` with Python 3.12 and a preconfigured synthetic operator (both localhost services returned HTTP 200); the interactive operator prompt was not tested. See [Windows CI evidence](https://github.com/bil332204-code/AiCON-2026-Milaan/actions/runs/40202954091).
 
 ## Demonstration scenarios
 
