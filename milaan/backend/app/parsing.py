@@ -96,7 +96,7 @@ def parse_statement(raw, owner_id, account_id, max_rows=2000):
 
 def safe_cell(value):
     s = str(value if value is not None else "")
-    return "'" + s if re.match(r"^\s*[=+@-]", s) else s
+    return "'" + s if re.match(r"^(?:[\t\r]|\s*[=+@-])", s) else s
 
 def csv_export(headers, rows):
     out = io.StringIO(newline="")
