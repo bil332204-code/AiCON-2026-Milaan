@@ -1,7 +1,7 @@
 name: Milaan public launch smoke
 on:
   push:
-    branches: [chore/milaan-public-launch-smoke]
+    branches: [main, chore/milaan-public-launch-smoke]
   workflow_dispatch:
 
 permissions:
