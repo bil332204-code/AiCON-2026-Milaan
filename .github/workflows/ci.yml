@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: python -m pip install -r milaan/backend/requirements.txt
+      - run: python -m pip install -c milaan/backend/constraints-py312.txt -r milaan/backend/requirements.txt
       - run: python -m pip check
       - run: python -m compileall -q milaan/backend/app demo-store/server.py tests
       - run: python -m pytest tests matching/tests
@@ -48,3 +48,7 @@ jobs:
             docs/screenshots/*.png
             tests/browser/test-results/
           retention-days: 7
+      - name: Build integrated deployment image
+        run: docker build -t milaan-v3-review:local .
+      - name: Validate container persistence and cookie authentication
+        run: python scripts/container_smoke.py

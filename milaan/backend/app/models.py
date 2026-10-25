@@ -12,6 +12,9 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     email: Mapped[str] = mapped_column(String(254), unique=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    login_locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(256))
     display_name: Mapped[str] = mapped_column(String(100))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -19,6 +22,7 @@ class User(Base):
 
 class SessionToken(Base):
     __tablename__ = "session_tokens"
+    session_kind: Mapped[str] = mapped_column(String(10), default="bearer", server_default="bearer")
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
@@ -179,6 +183,7 @@ class Content(Base):
 
 class PendingSignup(Base):
     __tablename__ = "pending_signups"
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE", name="fk_pending_signup_user"), nullable=True)
     email: Mapped[str] = mapped_column(String(254), primary_key=True)
     challenge_id: Mapped[str] = mapped_column(String(64), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
@@ -245,3 +250,13 @@ class MarketplaceOrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer)
     total_price_paisa: Mapped[int] = mapped_column(BigInteger)
 
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    last_sent_at: Mapped[datetime] = mapped_column(DateTime)
+    window_start: Mapped[datetime] = mapped_column(DateTime)
+    send_count: Mapped[int] = mapped_column(Integer)

@@ -22,3 +22,20 @@ def send_verification(settings, email, code):
         if settings.smtp_user:
             smtp.login(settings.smtp_user, settings.smtp_password)
         smtp.send_message(message)
+
+
+def send_password_reset(settings, email, token):
+    if not settings.smtp_host or not settings.smtp_from:
+        raise RuntimeError('Email is not configured')
+    message = EmailMessage()
+    message['Subject'] = 'Reset your Milaan password'
+    message['From'], message['To'] = settings.smtp_from, email
+    # A fragment avoids sending the token to HTTP access logs or referrers.
+    url = settings.public_origin + '/reset-password#token=' + token
+    message.set_content('Reset your password using this one-time link (expires in 15 minutes):\n\n'+url+'\n\nIf you did not request this, ignore this email. Never share the link.')
+    context = ssl.create_default_context()
+    connection = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15, context=context) if settings.smtp_security == 'ssl' else smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
+    with connection as smtp:
+        if settings.smtp_security == 'starttls': smtp.starttls(context=context)
+        if settings.smtp_user: smtp.login(settings.smtp_user, settings.smtp_password)
+        smtp.send_message(message)

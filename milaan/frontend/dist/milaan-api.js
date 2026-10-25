@@ -5,35 +5,47 @@ export class ApiError extends Error {
 export class MilaanAPI {
   constructor(baseUrl = 'http://127.0.0.1:8000') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.token = null;
+    this.sessionMode="cookie";
+    this.token = null; this.cookieSession = false; this.csrf = null;
   }
+  clearSession(notify=false) { clearTimeout(this.expiryTimer);this.token=null;this.cookieSession=false;this.csrf=null;if(notify&&this.onUnauthorized)this.onUnauthorized(); }
+  armExpiry(expires) { clearTimeout(this.expiryTimer);const remaining=Date.parse(expires)-Date.now();if(!Number.isFinite(remaining))return;this.expiryTimer=setTimeout(()=>{if(Date.now()>=Date.parse(expires))this.clearSession(true);else this.armExpiry(expires);},Math.max(0,Math.min(remaining,2147483647)));this.expiryTimer?.unref?.(); }
+  get authenticated() { return !!(this.token || this.cookieSession); }
+  adopt(data) { this.token=data.access_token||null;this.csrf=data.csrf_token||null;this.cookieSession=!!this.csrf;this.armExpiry(data.expires_at);return data; }
+  async restoreSession() { return this.adopt(await this.request('/api/auth/session')); }
   async request(path, { method = 'GET', body, headers = {}, signal, blob = false } = {}) {
     const h = { ...headers };
+    if(this.csrf&&!['GET','HEAD','OPTIONS'].includes(method))h['X-CSRF-Token']=this.csrf;
     if (this.token) h.Authorization = `Bearer ${this.token}`;
     if (body !== undefined && !(body instanceof FormData)) { h['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
-    const response = await fetch(`${this.baseUrl}${path}`, { method, headers: h, body, signal, cache: 'no-store' });
+    const response = await fetch(`${this.baseUrl}${path}`, { method, headers: h, body, signal, credentials:'include', cache: 'no-store' });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      if (response.status === 401) this.token = null;
+      if (response.status === 401) { this.clearSession(true); }
       throw new ApiError(response.status, error.detail || error);
     }
     if (response.status === 204) return null;
     return blob ? response.blob() : response.json();
   }
   async register(email, password, displayName) {
-    const data = await this.request('/api/auth/register', { method: 'POST', body: { email, password, display_name: displayName } });
-    this.token = data.access_token || null; return data;
+    const data = await this.request('/api/auth/register', { method: 'POST', body: { email, password, display_name: displayName, session_mode:this.sessionMode } });
+    return this.adopt(data);
   }
   async verifyEmail(challengeId, code) {
-    const data = await this.request('/api/auth/verify-email', {method:'POST', body:{challenge_id:challengeId,code}});
-    this.token = data.access_token; return data;
+    const data = await this.request('/api/auth/verify-email', {method:'POST', body:{challenge_id:challengeId,code,session_mode:this.sessionMode}});
+    return this.adopt(data);
   }
   resendCode(challengeId) { return this.request('/api/auth/resend-code', {method:'POST',body:{challenge_id:challengeId}}); }
-  async login(email, password) {
-    const data = await this.request('/api/auth/login', { method: 'POST', body: { email, password } });
-    this.token = data.access_token || null; return data;
+  async login(email, password, remember=false) {
+    const data = await this.request('/api/auth/login', { method: 'POST', body: { email, password, session_mode:this.sessionMode, remember_me:remember } });
+    return this.adopt(data);
   }
-  async logout() { try { return await this.request('/api/auth/logout', { method: 'POST' }); } finally { this.token = null; } }
+  async logout() { try { return await this.request('/api/auth/logout', { method: 'POST' }); } finally { this.clearSession(); } }
+  startAccountEmailVerification() { return this.request('/api/auth/verify-account-email/start',{method:'POST'}); }
+  confirmAccountEmail(challenge_id,code) { return this.request('/api/auth/verify-account-email',{method:'POST',body:{challenge_id,code}}); }
+  requestReset(email) { return this.request('/api/auth/request-password-reset',{method:'POST',body:{email}}); }
+  resetPassword(token,password) { return this.request('/api/auth/reset-password',{method:'POST',body:{token,password}}); }
+  async logoutAll() { try { return await this.request('/api/auth/logout-all',{method:'POST'}); } finally {this.clearSession();} }
   me() { return this.request('/api/auth/me'); }
   health() { return this.request('/api/health'); }
   integrations() { return this.request('/api/integrations/status'); }

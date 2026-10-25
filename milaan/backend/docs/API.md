@@ -175,3 +175,24 @@ Ship requires a valid candidate with the right account/amount and no existing al
 | 503 | Gemini not configured for an extraction request |
 
 Validation errors contain field locations/messages without echoing raw request values. Provider errors do not expose keys or receipt payloads.
+
+
+## V3 browser sessions and recovery
+
+Existing bearer clients remain supported; login/register/verify-email default to
+`session_mode: "bearer"`. The integrated browser explicitly selects `"cookie"`.
+Cookie replies omit `access_token`, set an HttpOnly host cookie, and return CSRF
+material. `GET /api/auth/session` restores the current user and CSRF material after
+refresh. Send credentials and `X-CSRF-Token` for unsafe cookie-authenticated requests.
+Same-origin HTTPS is the recommended production path; do not persist credentials
+in localStorage. `POST /api/auth/logout-all` revokes every user session.
+
+`POST /api/auth/request-password-reset` accepts email and returns a uniform message.
+Only verified emails are eligible. `POST /api/auth/reset-password` accepts a one-time
+`token` and new `password`; success revokes all sessions and requires login again.
+Legacy local accounts retain password access and may confirm their email using
+`POST /api/auth/verify-account-email/start` followed by authenticated
+`POST /api/auth/verify-account-email` with challenge_id/code. Guest verification
+cannot consume an authenticated-account challenge. Source schema and ownership
+remain unchanged. Read the [V3 deployment guide](../../../docs/V3_DEPLOYMENT.md)
+for cookies, SMTP, migrations and the separately hosted identity boundary.

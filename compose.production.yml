@@ -1,0 +1,38 @@
+# Same-origin HTTPS deployment. API port is internal; Caddy is its only ingress.
+services:
+  api:
+    build: .
+    env_file: ${MILAAN_ENV_FILE:-.env.production}
+    environment:
+      APP_ENV: production
+      PUBLIC_ORIGIN: https://${MILAAN_DOMAIN:?Set MILAAN_DOMAIN}
+      CORS_ORIGINS: https://${MILAAN_DOMAIN:?Set MILAAN_DOMAIN}
+      SESSION_COOKIE_SECURE: "true"
+      REQUIRE_EMAIL_VERIFICATION: "true"
+      DATABASE_URL: sqlite:////app/data/milaan.db
+      STORAGE_DIR: /app/data/uploads
+      RUN_WORKER_IN_API: "true"
+    volumes:
+      - application_data:/app/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+  web:
+    image: caddy:2-alpine
+    environment:
+      MILAAN_DOMAIN: ${MILAAN_DOMAIN:?Set MILAAN_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  application_data:
+  certificates:
+  caddy_config:

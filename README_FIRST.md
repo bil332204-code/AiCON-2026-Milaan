@@ -38,7 +38,7 @@ From this folder:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -r milaan/backend/requirements.txt
+.venv/bin/python -m pip install -c milaan/backend/constraints-py312.txt -r milaan/backend/requirements.txt
 .venv/bin/python setup_admin.py
 cd milaan/backend
 ../../.venv/bin/python -m alembic upgrade head
@@ -88,3 +88,15 @@ Before migrating existing data, back up the database and uploads together. See
 [privacy](docs/PRIVACY.md), [import contracts](docs/IMPORT_CONTRACTS.md) and
 [release validation](docs/RELEASE_REPORT.md). Nested guides are historical/reference
 material where they differ from this guide.
+
+
+## V3 browser authentication
+
+The integrated UI now uses HttpOnly browser sessions, with password visibility,
+verified signup, recovery and finite remember-me. Existing local passwords and data
+remain usable. If your older account has no recorded email verification, confirm its
+email in Account & content before password recovery can be enabled. SMTP must be
+configured for verification and reset delivery; no shared default credentials exist.
+Keep development HTTP bound to loopback. Use the root Dockerfile and
+[V3 deployment guide](docs/V3_DEPLOYMENT.md) for the new same-origin production path.
+The separately hosted Sites website is not updated by these repository changes.

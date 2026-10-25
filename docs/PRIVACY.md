@@ -37,3 +37,13 @@ records contain private response snapshots and expire/delete with their batch.
 Partial funding may remain in REVIEW while its credit shares stay reserved. Legacy
 HOLD/REVIEW, reset, deletion and expiry release reservations; no refund is sent.
 See [Milestone B](V2_MILESTONE_B.md) for budget protection and migration requirements.
+
+
+V3 browser sessions use HttpOnly cookies, in-memory CSRF material and server-side
+revocation/expiry. Remember-me has a finite 30-day maximum; passwords and raw reset
+credentials are not stored in browser web storage. Reset links expire after 15 minutes
+and use one-time hashed server records; recovery is enabled only for proven emails.
+Previously unverified local users must confirm the mailbox from an authenticated
+account first. Their IDs, password access and financial ownership are not rewritten.
+Hosted provider identities are not linked by email strings. See
+[V3 migration boundaries](V3_IDENTITY_MIGRATION.md) and [release evidence](V3_RELEASE.md).

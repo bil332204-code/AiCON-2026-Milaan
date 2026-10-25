@@ -8,7 +8,7 @@ from app.models import Base
 
 @pytest.fixture
 def env(tmp_path):
-    settings = Settings(database_url=f"sqlite:///{tmp_path}/test.db", storage_dir=tmp_path/"uploads", run_worker=False, testing=True, require_email_verification=False,
+    settings = Settings(app_env="development", cookie_secure=False, demo_seller_email="", demo_seller_password="", database_url=f"sqlite:///{tmp_path}/test.db", storage_dir=tmp_path/"uploads", run_worker=False, testing=True, require_email_verification=False,
                         extraction_provider="manual", gemini_key="", gemini_model="")
     app = create_app(settings)
     Base.metadata.create_all(app.state.database.engine)

@@ -17,7 +17,7 @@ Changing this repository does not update that application.
 
 | Capability | Hosted workspace (unverified claims) | GitHub local kit (source and local tests) |
 |---|---|---|
-| Authentication | ChatGPT sign-in | Email/password; revocable bearer sessions; SMTP verification or configured demo operator |
+| Authentication | ChatGPT sign-in | Email/password; HttpOnly browser cookies and CSRF; native bearer API; verified email and recovery |
 | Batch persistence | Hosted saved batches | SQLite; configurable expiry; PostgreSQL configuration available |
 | Orders CSV | Supported | Normalized CSV and individual order entry |
 | Statement CSV | Supported | Normalized CSV with account and coverage declaration |
@@ -52,7 +52,7 @@ verified runtime. From the repository root:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -r milaan/backend/requirements.txt
+.venv/bin/python -m pip install -c milaan/backend/constraints-py312.txt -r milaan/backend/requirements.txt
 .venv/bin/python setup_admin.py
 cd milaan/backend
 ../../.venv/bin/python -m alembic upgrade head
@@ -75,6 +75,16 @@ Python 3.13 and Windows execution remain unverified.
 | Pakistani name variation | REVIEW / POSSIBLE_MATCH |
 
 [Five-minute demo](docs/DEMO.md) · [Roman Urdu guide](DEMO_GUIDE_ROMAN_URDU.md).
+
+## V3 cinematic interface and independent sign-in
+
+[Implemented V3 build](docs/V3_RELEASE.md) adds a dark cinematic landing page and
+workspace, independent cookie-based browser authentication, verified signup,
+password recovery, refresh-safe sessions and a tested integrated deployment image.
+[Before/after captures](docs/V3_RELEASE.md#genuine-before-and-after-captures) use
+synthetic local data. The hosted Sites app remains separate and unchanged;
+[identity migration is blocked until authoritative access exists](docs/V3_IDENTITY_MIGRATION.md).
+See [deployment requirements](docs/V3_DEPLOYMENT.md) before exposing a new instance.
 
 ## V2 development
 

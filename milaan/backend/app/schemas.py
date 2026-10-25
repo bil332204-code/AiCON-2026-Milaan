@@ -9,8 +9,11 @@ class Register(Strict):
     email: EmailStr
     password: str = Field(min_length=10, max_length=256)
     display_name: str = Field(min_length=1, max_length=100)
+    session_mode: Literal["bearer", "cookie"] = "bearer"
 
 class Login(Strict):
+    session_mode: Literal["bearer", "cookie"] = "bearer"
+    remember_me: bool = False
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
     email: EmailStr
     password: str = Field(min_length=1, max_length=256)
@@ -71,6 +74,7 @@ class ContentWrite(Strict):
     value: dict
 
 class VerifyEmail(Strict):
+    session_mode: Literal["bearer", "cookie"] = "bearer"
     challenge_id: str = Field(min_length=32, max_length=64)
     code: str = Field(pattern=r"^[0-9]{6}$")
 
@@ -154,3 +158,12 @@ class AllocationPlan(Strict):
     orders: list[AllocationOrder] = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=5, max_length=1000)
     confirmed_relationships: bool = False
+
+
+class ResetRequest(Strict):
+    email: EmailStr
+
+class ResetPassword(Strict):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+    token: str = Field(min_length=40, max_length=128)
+    password: str = Field(min_length=10, max_length=256)

@@ -5,7 +5,7 @@ py -3.12 -m venv .venv
 if errorlevel 1 python -m venv .venv
 if errorlevel 1 goto fail
 :install
-".venv\Scripts\python.exe" -m pip install -r milaan\backend\requirements.txt
+".venv\Scripts\python.exe" -m pip install -c milaan\backend\constraints-py312.txt -r milaan\backend\requirements.txt
 if errorlevel 1 goto fail
 ".venv\Scripts\python.exe" setup_admin.py
 if errorlevel 1 goto fail
