@@ -37,7 +37,7 @@ def main():
         'S3_REGION': 'us-east-1', 'S3_ACCESS_KEY_ID': secrets.token_hex(12),
         'S3_SECRET_ACCESS_KEY': secrets.token_hex(24), 'S3_SESSION_TOKEN': '',
         'S3_PREFIX': 'synthetic/' + uuid.uuid4().hex + '/', 'S3_ADDRESSING_STYLE': 'path',
-        'SMTP_HOST': '', 'GEMINI_API_KEY': '', 'PUBLIC_ORIGIN': 'http://127.0.0.1:8000'}
+        'RESEND_API_KEY': '', 'EMAIL_FROM': '', 'EMAIL_DELIVERY_VERIFIED':'false', 'GEMINI_API_KEY': '', 'PUBLIC_ORIGIN': 'http://127.0.0.1:8000'}
     try:
         docker('run', '--detach', '--rm', '--name', names[0], '-p', '127.0.0.1::5432',
             '-e', 'POSTGRES_PASSWORD', '-e', 'POSTGRES_DB=synthetic', POSTGRES,

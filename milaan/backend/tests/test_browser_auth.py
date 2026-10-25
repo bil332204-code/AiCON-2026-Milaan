@@ -132,7 +132,7 @@ def test_secure_cookie_flag_and_production_validation(env):
     import pytest
     for overrides in [{'public_origin':'http://example.com','cookie_secure':True}, {'public_origin':'https://example.com','cookie_secure':False}]:
         with pytest.raises(ValueError): Settings(app_env='production',require_email_verification=True,**overrides)
-    Settings(app_env='production',public_origin='https://example.com',cookie_secure=True,require_email_verification=True, database_url='postgresql://synthetic:unused@db.example.com/test?sslmode=verify-full', migration_database_url='', storage_backend='s3', s3_endpoint_url='https://storage.example.com', s3_bucket='synthetic', s3_region='test', s3_access_key_id='synthetic', s3_secret_access_key='synthetic')
+    Settings(app_env='production',registration_open=False,public_origin='https://example.com',cookie_secure=True,require_email_verification=True, database_url='postgresql://synthetic:unused@db.example.com/test?sslmode=verify-full', migration_database_url='', storage_backend='s3', s3_endpoint_url='https://storage.example.com', s3_bucket='synthetic', s3_region='test', s3_access_key_id='synthetic', s3_secret_access_key='synthetic')
 
 
 def test_real_auth_rate_limit_rejects_sixteenth_request(tmp_path):
@@ -155,22 +155,6 @@ def test_results_remain_safe_during_concurrent_batch_deletion(env,auth):
         removed=pool.submit(client.delete,f'/api/batches/{batch["id"]}',headers=auth)
         assert removed.result().status_code==204
         assert all(read.result().status_code in [200,404] for read in reads)
-
-
-def test_reset_email_uses_verified_tls_transport_and_fragment_link(env,monkeypatch):
-    from app.emailer import send_password_reset
-    settings=env[2];settings.smtp_host='smtp.example.com';settings.smtp_from='no-reply@example.com';settings.smtp_security='starttls';settings.smtp_user=''
-    events=[]
-    class SMTP:
-        def __init__(self,*args,**kwargs):pass
-        def __enter__(self):return self
-        def __exit__(self,*args):pass
-        def starttls(self,context):events.append(('tls',context.check_hostname))
-        def send_message(self,message):events.append(('message',message.get_content()))
-    monkeypatch.setattr('app.emailer.smtplib.SMTP',SMTP)
-    send_password_reset(settings,'synthetic@example.com','synthetic-one-time-token')
-    assert events[0]==('tls',True)
-    assert settings.public_origin+'/reset-password#token=synthetic-one-time-token' in events[1][1]
 
 
 def test_invalid_unicode_password_is_validation_error_not_server_failure(env):
