@@ -34,3 +34,6 @@
 .preview-demo-link:focus-visible{outline:3px solid #83f7d4;outline-offset:3px}
 .hero .eyebrow,.last-cta .eyebrow{color:#c9d7ee}
 @media(prefers-reduced-motion:reduce){.preview-demo-link{transition:none}}
+
+/* Keep workspace help reachable on smaller screens without changing the header layout. */
+@media (max-width:760px){.app-header .icon-button[data-action="help"]{display:inline-flex;align-items:center;justify-content:center}}
