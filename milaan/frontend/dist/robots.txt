@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /workspace
+Disallow: /api/
+Sitemap: https://milaan.app/sitemap.xml
