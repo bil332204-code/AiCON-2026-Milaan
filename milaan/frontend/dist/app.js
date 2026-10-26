@@ -15,6 +15,13 @@ const content=$('#app-content');
 const backend=createBackend({getState:()=>state,setState:value=>{state=value},render,showWorkspace,dispose,toast,ask});
 function log(title,detail){state.activity.unshift({title,detail,at:Date.now()});}
 log('Demo batch is ready','12 fictional orders, sample receipt fields and a synthetic statement. Matching is computed locally.');
+const privateBeta=()=>document.querySelector('meta[name="milaan-registration-state"]')?.content==='closed';
+async function existingAccountGate(){
+  if(!privateBeta()||backend.api.authenticated)return true;
+  return await ask('Private beta · Existing accounts only',
+    'New signups are not available yet. Naya account filhaal nahi ban sakta. You can explore the fictional demo without signing in. If you already have an account, continue to sign in.',
+    'Sign in with existing account');
+}
 function toast(text){$('#toast').textContent=text;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),4500);}
 function download(text,name,type='text/csv;charset=utf-8'){const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function ask(title,text,label='Continue'){return new Promise(resolve=>{const d=$('#confirm-dialog');$('#confirm-title').textContent=title;$('#confirm-text').textContent=text;$('#confirm-yes').textContent=label;let done=false;const finish=value=>{if(done)return;done=true;d.close();d.removeEventListener('cancel',cancel);resolve(value);};const cancel=e=>{e.preventDefault();finish(false);};$('#confirm-yes').onclick=()=>finish(true);$('#confirm-cancel').onclick=()=>finish(false);d.addEventListener('cancel',cancel);d.showModal();});}
@@ -131,7 +138,7 @@ document.addEventListener('click',async e=>{
     if(b.dataset.close){$('#'+b.dataset.close).close();return;}
     if(b.dataset.scenario){scenario(b.dataset.scenario);return;}
     if(b.dataset.action){e.preventDefault();const action=b.dataset.action;
-      if(action==='home')return home();if(action==='demo')return await fresh(true);if(action==='workspace')return backend.open();if(action==='new')return await fresh(false);if(action==='help')return $('#help-dialog').showModal();
+      if(action==='home')return home();if(action==='demo')return await fresh(true);if(action==='workspace'){if(await existingAccountGate())return backend.open();return;}if(action==='new'){if(privateBeta()&&!backend.api.authenticated){if(await existingAccountGate())return backend.open();return;}return await fresh(false);}if(action==='help')return $('#help-dialog').showModal();
       if(action==='reconcile')return await run();
       if(action==='export'){if(!state.results.length)return;if(state.remote)return await backend.exportResults();download(exportCSV(state.results,state.mode==='demo'?'FICTIONAL_DEMO':'UPLOADED_RECORDS'),'milaan-reconciliation.csv');log('Results exported',`${state.results.length} order outcomes downloaded as CSV.`);toast('Reconciliation CSV exported.');return;}
       if(action==='audit-export'){download(JSON.stringify({mode:state.mode,events:state.activity},null,2),'milaan-activity-log.json','application/json');return;}
@@ -174,7 +181,7 @@ document.addEventListener('keydown',e=>{const row=e.target.closest('tr[data-orde
 ['dragover','dragleave','drop'].forEach(type=>document.addEventListener(type,e=>{const zone=e.target.closest('[data-drop]');if(!zone)return;e.preventDefault();zone.classList.toggle('dragover',type==='dragover');if(type==='drop')importFile(zone.dataset.drop,[...e.dataTransfer.files]);}));
 window.addEventListener('beforeunload',e=>{if(state.claims.some(c=>c.dirty)||(!state.remote&&state.mode==='own'&&(state.orders.length||state.claims.length||state.lines.length))){e.preventDefault();e.returnValue='';}});
 window.addEventListener('hashchange',()=>{if(location.hash==='#workspace')showWorkspace();else if(!$('#workspace').hidden)home();});
-scenario('match');if(location.hash==='#workspace')showWorkspace();
+scenario('match');if(privateBeta()){const hero=$('.hero-actions');if(hero){const info=document.createElement('p');info.className='private-beta-note';info.textContent='Private beta: new signup is closed / Naya signup filhaal band hai. Existing users can sign in. The sample demo stays open to everyone.';hero.insertAdjacentElement('afterend',info);}}if(location.hash==='#workspace')showWorkspace();
 
 function renderRemoteImports(){
   const locked=!!state.remote.latest_run_id,account=state.statementAccount||state.orders.find(o=>!state.statements.some(s=>s.account_id===o.account))?.account||state.orders[0]?.account||'';

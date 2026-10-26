@@ -710,7 +710,7 @@ def create_app(settings=None):
     @app.api_route('/about', methods=['GET', 'HEAD'], include_in_schema=False)
     def public_page(request: Request):
         # Only this fixed allowlist can map to a public document, never arbitrary file paths.
-        return public_document(request.url.path, settings.public_origin)
+        return public_document(request.url.path, settings.public_origin, settings.registration_open)
 
     @app.api_route('/index.html', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/privacy.html', methods=['GET', 'HEAD'], include_in_schema=False)

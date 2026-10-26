@@ -1,4 +1,6 @@
 /* Small Phase-1 additions only; preserve Milaan's cinematic design tokens. */
+.hero-problem{font-size:clamp(14px,1.5vw,17px);font-weight:700;color:#91f5d2;margin:15px 0 6px}
+.private-beta-note{font-size:12px;line-height:1.65;color:#c5d7ed;margin:12px 0;max-width:550px}
 .reference-explainer{max-width:540px;color:#c1cce1;font-size:12px;line-height:1.7;margin:13px 0 0}
 .reference-explainer strong{color:#91f5d2}
 .guide-language-toggle{display:flex;gap:6px;margin:16px 0 22px}
