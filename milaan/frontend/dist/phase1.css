@@ -29,3 +29,13 @@
 .legal-content a{color:#91f5d2;text-decoration:underline}
 .legal-footer{max-width:1000px;margin:0 auto;padding:25px 26px 40px;border-top:1px solid #ffffff24;display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}
 @media(max-width:750px){.legal-top{flex-wrap:wrap}.legal-content{padding-top:40px}.site-footer{flex-wrap:wrap}.reference-explainer{font-size:11px}}
+
+/* A visible keyboard/touch path from the decorative payment illustration. */
+.hero-illustration-action{position:relative;margin:8px 0 0;display:flex;justify-content:center}
+.preview-demo-link{background:#17263a;border:1px solid #7bded3;color:#e3f4ff;padding:11px 17px;border-radius:12px;min-height:44px;font-size:12px;max-width:100%;text-align:center}
+.preview-demo-link:focus-visible{outline:3px solid #83f7d4;outline-offset:3px}
+.hero .eyebrow,.last-cta .eyebrow{color:#c9d7ee}
+@media(prefers-reduced-motion:reduce){.preview-demo-link{transition:none}}
+
+/* Keep workspace help reachable on smaller screens without changing the header layout. */
+@media (max-width:760px){.app-header .icon-button[data-action="help"]{display:inline-flex;align-items:center;justify-content:center}}

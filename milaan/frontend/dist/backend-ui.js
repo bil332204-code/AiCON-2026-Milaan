@@ -51,7 +51,7 @@ export function createBackend(hooks) {
   }
   function authError(error){$('#account-error').hidden=false;$('#account-error').textContent=Array.isArray(error.detail)?error.detail.map(e=>e.msg).join(' '):error.message==='Failed to fetch'?'Could not connect. Try again, or check your connection.':error.message;}
   function success(text){$('#account-success').hidden=false;$('#account-success').textContent=text;}
-  function mode(value){authMode=value;challenge=null;for(const id of ['account-password','account-confirm'])$('#'+id).type='password';$('#password-toggle').textContent='Show';$('#password-toggle').setAttribute('aria-label','Show password');$('#password-toggle').setAttribute('aria-pressed','false');$('#account-error').hidden=true;$('#account-success').hidden=true;$('#account-password').value='';$('#account-confirm').value='';showAuthMode();}
+  function mode(value){authMode=value==='signup'&&document.querySelector('meta[name="milaan-registration-state"]')?.content==='closed'?'login':value;challenge=null;for(const id of ['account-password','account-confirm'])$('#'+id).type='password';$('#password-toggle').textContent='Show';$('#password-toggle').setAttribute('aria-label','Show password');$('#password-toggle').setAttribute('aria-pressed','false');$('#account-error').hidden=true;$('#account-success').hidden=true;$('#account-password').value='';$('#account-confirm').value='';showAuthMode();}
   $('#account-switch').onclick=()=>{if(challenge?.account_verification){challenge=null;authDialog.close();return;}mode(authMode==='login'&&!challenge?'signup':'login');};
   $('#forgot-password').onclick=()=>mode('forgot');
   $('#backend-origin').addEventListener('change',()=>{try{api.baseUrl=validateBackendURL($('#backend-origin').value.trim());api.sessionMode=new URL(api.baseUrl).hostname===location.hostname&&new URL(api.baseUrl).protocol===location.protocol?'cookie':'bearer';if(api.sessionMode==='bearer')$('#account-remember').checked=false;showAuthMode();}catch(error){authError(error);}});
@@ -79,9 +79,9 @@ export function createBackend(hooks) {
   async function authenticate(action='batches',requestedMode='login'){
     await ready;pending=action;
     if(api.authenticated&&requestedMode==='login'){if(action==='new')return newBatch();if(action==='sample')return serverDemo();return showWorkspace('batches');}
-    mode(requestedMode);document.body.classList.add('auth-open');if(!authDialog.open)authDialog.showModal();
+    const closedSignup=requestedMode==='signup'&&document.querySelector('meta[name="milaan-registration-state"]')?.content==='closed';mode(requestedMode);if(closedSignup)success('Private beta: new signup is currently closed. Existing members can sign in.');document.body.classList.add('auth-open');if(!authDialog.open)authDialog.showModal();
     // Focus before accepting input; a delayed frame can steal focus mid-keystroke.
-    const target=challenge?$('#account-code'):requestedMode==='signup'?$('#account-name'):requestedMode==='reset'?$('#account-password'):$('#account-email');target.focus();
+    const target=challenge?$('#account-code'):authMode==='signup'?$('#account-name'):authMode==='reset'?$('#account-password'):$('#account-email');target.focus();
   }
   function restore(){
     ready=(async()=>{

@@ -137,3 +137,55 @@ def test_legal_roman_urdu_summary_is_clearly_non_authoritative(env):
         page=client.get(path).text
         assert 'lang="ur-Latn"' in page and "sirf khulasa" in page
         assert "English draft" in page
+
+def test_social_metadata_sitemap_and_helpful_missing_route(env):
+    client,_,settings=env
+    for route in ["/","/guide","/privacy","/terms","/about"]:
+        page=client.get(route)
+        assert page.status_code==200
+        assert 'property="og:image"' in page.text
+        assert 'name="twitter:card" content="summary_large_image"' in page.text
+        assert f'{settings.public_origin}/share-card.png' in page.text
+    for target, text in [("/share-card.png",None),("/robots.txt","Sitemap:"),("/sitemap.xml","<urlset")]:
+        response=client.get(target)
+        assert response.status_code==200
+        if text is not None: assert text in response.text
+    unknown=client.get("/not-a-real-page", follow_redirects=False)
+    assert unknown.status_code==404
+    assert 'Page not found' in unknown.text
+
+def test_social_raster_is_valid_1200_by_630(env):
+    from io import BytesIO
+    from PIL import Image
+    response=env[0].get('/share-card.png')
+    assert response.status_code==200
+    assert response.headers['content-type'].startswith('image/png')
+    with Image.open(BytesIO(response.content)) as picture:
+        assert picture.size == (1200,630)
+        picture.verify()
+
+@pytest.mark.parametrize("route", ["/login", "/signup", "/reset-password"])
+@pytest.mark.parametrize("is_open", [False, True])
+def test_direct_account_page_respects_registration_gate(env, route, is_open):
+    client, _, settings = env
+    settings.registration_open = is_open
+    response = client.get(route)
+    assert response.status_code == 200
+    expected = "open" if is_open else "closed"
+    assert f'<meta name="milaan-registration-state" content="{expected}">' in response.text
+
+
+def test_existing_account_workspace_keeps_closed_registration_label(env):
+    client, _, settings = env
+    signup = client.post("/api/auth/register", json={
+        "email": "existing@example.com", "password": "synthetic-password-for-test",
+        "display_name": "Existing User"})
+    assert signup.status_code == 201
+    login = client.post("/api/auth/login", json={
+        "email": "existing@example.com", "password": "synthetic-password-for-test",
+        "session_mode": "cookie"})
+    assert login.status_code == 200
+    settings.registration_open = False
+    workspace = client.get("/workspace")
+    assert workspace.status_code == 200
+    assert '<meta name="milaan-registration-state" content="closed">' in workspace.text
