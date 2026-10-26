@@ -22,7 +22,7 @@ from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_expor
 from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
 from .middleware import GuardMiddleware, CanonicalOriginMiddleware
 from .jobs import audit, worker_loop
-from .documents import public_document
+from .documents import public_document, app_shell
 
 DUMMY_PASSWORD_HASH = password_hash(secrets.token_urlsafe(32))
 
@@ -701,7 +701,7 @@ def create_app(settings=None):
         session = db.get(SessionToken, token_digest(raw)) if raw else None
         if not session or session.session_kind != 'cookie' or session.expires_at <= now():
             return RedirectResponse('/login?next=/workspace', status_code=303)
-        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
+        return app_shell(settings.registration_open)
 
     @app.api_route('/', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/guide', methods=['GET', 'HEAD'], include_in_schema=False)
@@ -728,7 +728,7 @@ def create_app(settings=None):
     @app.api_route('/signup', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/reset-password', methods=['GET', 'HEAD'], include_in_schema=False)
     def browser_page():
-        return FileResponse(Path(__file__).resolve().parents[2]/'frontend/dist/index.html')
+        return app_shell(settings.registration_open)
 
     from fastapi.staticfiles import StaticFiles
     frontend=Path(__file__).resolve().parents[2]/"frontend"/"dist"

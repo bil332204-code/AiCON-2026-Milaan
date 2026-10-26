@@ -163,3 +163,29 @@ def test_social_raster_is_valid_1200_by_630(env):
     with Image.open(BytesIO(response.content)) as picture:
         assert picture.size == (1200,630)
         picture.verify()
+
+@pytest.mark.parametrize("route", ["/login", "/signup", "/reset-password"])
+@pytest.mark.parametrize("is_open", [False, True])
+def test_direct_account_page_respects_registration_gate(env, route, is_open):
+    client, _, settings = env
+    settings.registration_open = is_open
+    response = client.get(route)
+    assert response.status_code == 200
+    expected = "open" if is_open else "closed"
+    assert f'<meta name="milaan-registration-state" content="{expected}">' in response.text
+
+
+def test_existing_account_workspace_keeps_closed_registration_label(env):
+    client, _, settings = env
+    signup = client.post("/api/auth/register", json={
+        "email": "existing@example.com", "password": "synthetic-password-for-test",
+        "display_name": "Existing User"})
+    assert signup.status_code == 201
+    login = client.post("/api/auth/login", json={
+        "email": "existing@example.com", "password": "synthetic-password-for-test",
+        "session_mode": "cookie"})
+    assert login.status_code == 200
+    settings.registration_open = False
+    workspace = client.get("/workspace")
+    assert workspace.status_code == 200
+    assert '<meta name="milaan-registration-state" content="closed">' in workspace.text

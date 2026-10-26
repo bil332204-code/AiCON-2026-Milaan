@@ -41,3 +41,10 @@ def public_document(path, origin, registration_open=True):
                 f'<meta name="twitter:image" content="{escape(origin.rstrip("/") + "/share-card.png",quote=True)}">\n')
     metadata += '<meta name="milaan-registration-state" content="' + ('open' if registration_open else 'closed') + '">\n'
     return HTMLResponse(content.replace('</head>', metadata + '</head>', 1))
+
+def app_shell(registration_open=True):
+    """Account-shell state comes from the server, including direct /signup links."""
+    content = (FRONTEND / 'index.html').read_text(encoding='utf-8')
+    state = 'open' if registration_open else 'closed'
+    return HTMLResponse(content.replace('</head>',
+                        f'<meta name="milaan-registration-state" content="{state}">\n</head>', 1))
