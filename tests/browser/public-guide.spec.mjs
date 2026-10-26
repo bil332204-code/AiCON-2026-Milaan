@@ -77,3 +77,21 @@ test('guide dialog keeps focus inside until Escape and restores opener focus', a
   await expect(guide).toBeHidden();
   await expect(opener).toBeFocused();
 });
+
+test('direct signup URL respects closed beta and shows existing-account sign-in', async ({page}) => {
+  // Synthetic page-state override: no production flags, services or accounts touched.
+  await page.route('**/signup', async route => {
+    const origin = await route.fetch();
+    const body = await origin.text();
+    expect(body).toContain('name="milaan-registration-state" content="open"');
+    await route.fulfill({response:origin,
+      body:body.replace('name="milaan-registration-state" content="open"',
+                        'name="milaan-registration-state" content="closed"')});
+  });
+  await page.goto('/signup');
+  await expect(page.locator('#account-dialog')).toBeVisible();
+  await expect(page.locator('#account-heading')).toHaveText('Welcome back.');
+  await expect(page.locator('#account-switch')).toBeHidden();
+  await expect(page.locator('#account-success')).toContainText('new signup is currently closed');
+  await expect(page.locator('#account-email')).toBeFocused();
+});
