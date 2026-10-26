@@ -56,3 +56,25 @@ def test_resume_does_not_duplicate_evidence(tmp_path, monkeypatch, failed_stage)
         assert all(len(remote[x])==1 for x in ['orders','statements','claims','jobs'])
         assert counts['orders']==counts['statement']==counts['claims']==1
         assert c.post(f'/api/orders/{oid}/sync',json={'mode':'fixture'}).status_code==200
+
+
+def test_demo_statement_export_protects_synthetic_spreadsheet_cells(tmp_path, monkeypatch):
+    """CSV from the separate demo store must preserve customer input as literal text."""
+    import csv
+    import io
+    monkeypatch.setenv('STORE_DB', str(tmp_path / 'store.db'))
+    spec = importlib.util.spec_from_file_location(
+        'demo_store_export', Path(__file__).resolve().parents[1] / 'demo-store/server.py')
+    store = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(store)
+    names = ['=1+1', '+SUM(1)', '-2+3', '@SUM(A1:A2)', '\t=5', '\r+5', '   =9', 'Synthetic Buyer']
+    sample = store.csv_bytes(['counterparty'], [[name] for name in names])
+    exported = list(csv.reader(io.StringIO(sample.decode('utf-8'))))
+    assert [row[0] for row in exported[1:]] == [
+        ("'" + name) if index < 7 else name for index, name in enumerate(names)]
+    statement = store.bank_csv({'amount': 350000, 'reference': 'SYNTHETIC123',
+        'bank_at': '2026-10-09T14:22:00+05:00', 'name': '=CMD(1)', 'scenario': 'matched'})
+    rows = list(csv.DictReader(io.StringIO(statement.decode('utf-8'))))
+    assert len(rows) == 1
+    assert rows[0]['counterparty'] == "'=CMD(1)"
+    assert rows[0]['amount'] == '3500.00'

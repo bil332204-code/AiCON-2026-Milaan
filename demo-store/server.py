@@ -47,8 +47,16 @@ def owned(id,s):
     with sqlite3.connect(DB) as db:row=db.execute('SELECT payload FROM orders WHERE id=? AND owner=?',(id,s['owner'])).fetchone()
     if not row:raise HTTPException(404,'Order not found')
     return json.loads(row[0])
+def safe_csv_cell(value):
+    """Keep untrusted fields as literal text in downloadable spreadsheet CSVs."""
+    cell = str(value if value is not None else '')
+    return "'" + cell if cell.startswith(('\t', '\r')) or (cell.lstrip() and cell.lstrip()[0] in '=+-@') else cell
+
 def csv_bytes(headers,rows):
-    f=io.StringIO();w=csv.writer(f);w.writerow(headers);w.writerows(rows);return f.getvalue().encode()
+    f=io.StringIO();w=csv.writer(f)
+    w.writerow(headers)
+    w.writerows([[safe_csv_cell(value) for value in row] for row in rows])
+    return f.getvalue().encode('utf-8')
 def receipt(o):
     im=Image.new('RGB',(850,620),'#f7faf4');d=ImageDraw.Draw(im)
     try:font=ImageFont.truetype('DejaVuSans.ttf',23);title=ImageFont.truetype('DejaVuSans.ttf',32)
