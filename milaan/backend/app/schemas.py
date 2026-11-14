@@ -81,52 +81,6 @@ class VerifyEmail(Strict):
 class ResendEmail(Strict):
     challenge_id: str = Field(min_length=32, max_length=64)
 
-class ProductCreate(Strict):
-    name: str = Field(min_length=1, max_length=200)
-    description: str = Field(default="", max_length=5000)
-    sku: str = Field(min_length=1, max_length=100)
-    category: str = Field(default="General", min_length=1, max_length=100)
-    purchase_price: str = Field(max_length=30)
-    selling_price: str = Field(max_length=30)
-    stock_quantity: int = Field(default=0, ge=0)
-    low_stock_threshold: int = Field(default=5, ge=0)
-    is_active: bool = True
-    image_url: str | None = Field(default=None, max_length=500)
-
-class ProductUpdate(Strict):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=5000)
-    sku: str | None = Field(default=None, min_length=1, max_length=100)
-    category: str | None = Field(default=None, min_length=1, max_length=100)
-    purchase_price: str | None = Field(default=None, max_length=30)
-    selling_price: str | None = Field(default=None, max_length=30)
-    stock_quantity: int | None = Field(default=None, ge=0)
-    low_stock_threshold: int | None = Field(default=None, ge=0)
-    is_active: bool | None = None
-    image_url: str | None = Field(default=None, max_length=500)
-
-class StockUpdate(Strict):
-    stock_quantity: int = Field(ge=0)
-
-class CartItemAdd(Strict):
-    product_id: str = Field(min_length=1, max_length=36)
-    quantity: int = Field(default=1, ge=1)
-
-class CartItemUpdate(Strict):
-    quantity: int = Field(ge=1)
-
-class CheckoutRequest(Strict):
-    customer_name: str = Field(min_length=1, max_length=150)
-    customer_email: EmailStr
-    customer_phone: str | None = Field(default=None, max_length=30)
-    shipping_address: str | None = Field(default=None, max_length=500)
-    notes: str | None = Field(default=None, max_length=500)
-
-class OrderStatusUpdate(Strict):
-    status: Literal["Pending", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"]
-
-
-
 class ImportProvenance(Strict):
     """Client-declared source identity, not a proof of authenticity."""
     source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -167,3 +121,18 @@ class ResetPassword(Strict):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
     token: str = Field(min_length=40, max_length=128)
     password: str = Field(min_length=10, max_length=256)
+
+
+class DeleteAccount(Strict):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+    password: str = Field(min_length=1, max_length=256)
+    confirm: Literal["DELETE"]
+
+
+class TotpCode(Strict):
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class TotpLogin(Strict):
+    challenge_id: str = Field(min_length=32, max_length=96)
+    code: str = Field(pattern=r"^[0-9]{6}$")

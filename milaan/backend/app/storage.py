@@ -10,9 +10,16 @@ def clean_image(raw):
     with warnings.catch_warnings():
         warnings.simplefilter("error", Image.DecompressionBombWarning)
         try:
-            with Image.open(BytesIO(raw)) as image:
-                if image.format not in {"JPEG", "PNG", "WEBP"}: raise ValueError("Only JPG, PNG and WEBP are accepted")
+            # `formats` stops Pillow from even trying its other (rarely used, bug-prone) parsers.
+            try:
+                image = Image.open(BytesIO(raw), formats=["JPEG", "PNG", "WEBP"])
+            except Image.UnidentifiedImageError as exc:
+                raise ValueError("Only JPG, PNG and WEBP are accepted") from exc
+            with image:
                 if image.width * image.height > 25_000_000: raise ValueError("Image exceeds 25 megapixels")
+                if image.format == "JPEG":
+                    # Decode large photos at reduced scale: far less memory than full size.
+                    image.draft("RGB", (2400, 2400))
                 image.load()
                 clean = ImageOps.exif_transpose(image).convert("RGB")
                 clean.thumbnail((2400, 2400))

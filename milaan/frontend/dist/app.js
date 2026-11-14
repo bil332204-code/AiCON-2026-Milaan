@@ -108,7 +108,7 @@ async function importFile(kind,files){
 }
 function getOCR(){
   if(window.Tesseract)return Promise.resolve(window.Tesseract);if(window.milaanOcrLoad)return window.milaanOcrLoad;
-  window.milaanOcrLoad=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';s.crossOrigin='anonymous';const timer=setTimeout(()=>reject(Error('OCR engine download timed out. Enter the details manually or try again.')),30000);s.onload=()=>{clearTimeout(timer);window.Tesseract?resolve(window.Tesseract):reject(Error('OCR engine did not start.'));};s.onerror=()=>{clearTimeout(timer);reject(Error('OCR engine could not download. You can enter the details manually.'));};document.head.append(s);}).catch(error=>{window.milaanOcrLoad=null;throw error;});return window.milaanOcrLoad;
+  window.milaanOcrLoad=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';s.crossOrigin='anonymous';s.integrity='sha384-r1ru3tcf6FhnCFR4B7pIFG+BhFF9LlFtz/P1y4pblWn3AGs9y3lBx5SKLNf4+rED';s.referrerPolicy='no-referrer';const timer=setTimeout(()=>reject(Error('OCR engine download timed out. Enter the details manually or try again.')),30000);s.onload=()=>{clearTimeout(timer);window.Tesseract?resolve(window.Tesseract):reject(Error('OCR engine did not start.'));};s.onerror=()=>{clearTimeout(timer);reject(Error('OCR engine could not download. You can enter the details manually.'));};document.head.append(s);}).catch(error=>{window.milaanOcrLoad=null;throw error;});return window.milaanOcrLoad;
 }
 async function readOCR(ids){
   if(state.remote)return backend.read(ids);

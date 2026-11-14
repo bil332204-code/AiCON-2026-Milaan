@@ -9,6 +9,7 @@ from .allocations import lock_seller, remaining_credit, add_allocation
 from .parsing import paisa, parse_time, full_ref, norm_ref
 from .matcher import successful_status
 from .jobs import audit
+from .ledger import log_decision
 
 
 def checked_source(db, batch, order, part):
@@ -44,7 +45,7 @@ def checked_source(db, batch, order, part):
     return line, claim
 
 
-def review_allocations(db, batch, user, body, key):
+def review_allocations(db, batch, user, body, key, settings):
     if not body.confirmed_relationships:
         raise HTTPException(422, 'Explicitly confirm the relationships between all selected orders, receipts and source credits')
     if not 8 <= len(key) <= 100:
@@ -112,6 +113,8 @@ def review_allocations(db, batch, user, body, key):
             'outstanding_paisa': order.amount_due_paisa-paid, 'parts': allocations}]
         items.append({'match_id': match.id, 'version': match.version, 'final_status': match.final_status,
                       'allocated_paisa': paid, 'outstanding_paisa': order.amount_due_paisa-paid, 'allocations': allocations})
+        log_decision(db, settings, owner_id=user.id, batch=batch, order=order, decision=match.final_status, source='seller-shares',
+                     reason=body.reason, transaction_id=', '.join(sorted({line.transaction_id for line, _, _ in parts}))[:150])
         audit(db, batch.id, user.id, 'allocation_reviewed', {'match_id': match.id, 'previous': previous_status,
               'decision': match.final_status, 'reason': body.reason, 'version': match.version, 'allocations': allocations})
     response = {'batch_id': batch.id, 'items': items}

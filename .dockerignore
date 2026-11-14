@@ -12,3 +12,9 @@
 **/playwright-report
 attachments
 .gitignore
+# Offline ML training and evaluation code (uses pickle) is not part of the running app.
+milaan/backend/matching/model.py
+milaan/backend/matching/evaluate.py
+milaan/backend/matching/synthetic.py
+milaan/backend/matching/feedback.py
+milaan/backend/matching/tests

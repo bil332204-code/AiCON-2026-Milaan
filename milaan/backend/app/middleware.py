@@ -1,38 +1,62 @@
-from collections import defaultdict, deque
-import time, threading
 from starlette.responses import JSONResponse
+from .limits import RateLimiter, client_ip
+
+AUTH_PATHS = {"/api/auth/login", "/api/auth/register", "/api/auth/verify-email", "/api/auth/resend-code",
+              "/api/auth/request-password-reset", "/api/auth/reset-password", "/api/auth/totp/verify-login"}
+PRIVATE_PAGES = {"/workspace", "/login", "/signup", "/reset-password"}
+# One policy for every page. Scripts only from this origin, plus the pinned, integrity-checked
+# OCR engine on jsDelivr (it runs its worker from a blob: URL and needs WebAssembly).
+CSP = ("default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; "
+       "worker-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net blob: data:{extra}; "
+       "img-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; "
+       "object-src 'none'; form-action 'self'")
+
+
+def security_headers(path, production, connect_extra=""):
+    if path.startswith("/api/") or path in PRIVATE_PAGES:
+        cache = b"no-store"
+    else:  # public pages and static files: revalidate with ETag/Last-Modified instead of re-downloading
+        cache = b"no-cache"
+    headers = [(b"x-content-type-options", b"nosniff"), (b"cache-control", cache),
+               (b"referrer-policy", b"no-referrer"), (b"x-frame-options", b"DENY"),
+               (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+               (b"cross-origin-opener-policy", b"same-origin"),
+               (b"content-security-policy", CSP.format(extra=connect_extra).encode())]
+    # Render terminates public TLS; HSTS only belongs on configured production.
+    if production:
+        headers.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
+    return headers
+
 
 class GuardMiddleware:
-    """Bounded input + basic single-instance rate limits. No untrusted proxy IP headers."""
-    def __init__(self, app, limit, testing=False, production=False):
+    """Bounded input + single-instance rate limits keyed on the real client IP.
+
+    Behind Render every socket peer is 127.0.0.1, so the client address comes from the
+    trusted proxy headers (see limits.client_ip); keying on the peer would make one bucket
+    shared by every visitor."""
+    def __init__(self, app, limit, testing=False, production=False, trust_proxy=True, connect_extra=""):
         self.app, self.limit, self.testing, self.production = app, limit, testing, production
-        self.hits = defaultdict(deque)
-        self.lock = threading.Lock()
+        self.trust_proxy, self.connect_extra = trust_proxy, connect_extra
+        self.per_ip = RateLimiter(15, 60)
+        # Ceiling across all clients: protects CPU (scrypt) from a distributed flood.
+        self.overall = RateLimiter(600, 60)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http": return await self.app(scope, receive, send)
         method, path = scope["method"], scope["path"]
+        ip = client_ip(scope, self.trust_proxy)
+        scope.setdefault("state", {})["client_ip"] = ip
         async def guarded_send(message):
             if message["type"] == "http.response.start":
                 headers = message.setdefault("headers", [])
-                headers.extend([(b"x-content-type-options", b"nosniff"), (b"cache-control", b"no-store"),
-                    (b"referrer-policy", b"no-referrer"), (b"x-frame-options", b"DENY"),
-                    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
-                    (b"content-security-policy", b"frame-ancestors 'none'; base-uri 'self'; object-src 'none'")])
-                # Render terminates public TLS; HSTS only belongs on configured production.
-                if self.production:
-                    headers.append((b"strict-transport-security", b"max-age=31536000"))
+                present = {k.lower() for k, _ in headers}
+                for key, value in security_headers(path, self.production, self.connect_extra):
+                    if key not in present: headers.append((key, value))
             await send(message)
-        if not self.testing and method == "POST" and path in {"/api/auth/login", "/api/auth/register", "/api/auth/verify-email", "/api/auth/resend-code", "/api/auth/request-password-reset", "/api/auth/reset-password"}:
-            key = scope.get("client", ("unknown",))[0]
-            with self.lock:
-                t = time.monotonic()
-                if len(self.hits) > 10000: self.hits.clear()
-                q = self.hits[key]
-                while q and q[0] < t - 60: q.popleft()
-                limited = len(q) >= 15
-                if not limited: q.append(t)
-            if limited: return await JSONResponse({"detail": "Too many authentication attempts; wait a minute"}, 429)(scope, receive, guarded_send)
+        if not self.testing and method == "POST" and path in AUTH_PATHS:
+            limited = not self.per_ip.hit(ip) or not self.overall.hit("all")
+            if limited: return await JSONResponse({"detail": "Too many attempts from your network; wait a minute"}, 429)(scope, receive, guarded_send)
         if method in {"POST", "PUT", "PATCH"}:
             parts, total = [], 0
             while True:

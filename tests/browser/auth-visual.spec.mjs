@@ -67,7 +67,7 @@ test('independent signup, verification, refresh, recovery and private user isola
  await page.locator('#account-email').fill(email);await page.locator('#account-password').fill(password);await page.locator('#account-submit').click();await expect(page.locator('#account-error')).toBeVisible();
  await page.locator('#account-password').fill('new-synthetic-v3-passphrase');await page.locator('#account-remember').check();await page.locator('#account-submit').click();
  await expect(page.locator(`[data-batch-id="${batchId}"]`)).toBeVisible();
- const remembered=(await page.context().cookies()).find(c=>c.name==='milaan_session');expect(remembered.expires).toBeGreaterThan(Date.now()/1000+20*86400);
+ const remembered=(await page.context().cookies()).find(c=>c.name==='milaan_session');expect(remembered.expires).toBeGreaterThan(Date.now()/1000+10*86400);expect(remembered.expires).toBeLessThan(Date.now()/1000+15*86400);
  const secondContext=await browser.newContext({baseURL:'http://127.0.0.1:8765',viewport:info.project.use.viewport});const second=await secondContext.newPage();
  await signup(second,`other-v3-${info.project.name}@example.com`);
  await second.goto('/workspace?batch='+batchId);await expect(second.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
@@ -75,7 +75,8 @@ test('independent signup, verification, refresh, recovery and private user isola
  await secondContext.close();
  await page.locator('[data-action="settings"]').click();await page.getByRole('button',{name:'Sign out',exact:true}).click();
  await page.locator('#account-switch').click();await page.locator('#account-name').fill('Duplicate');await page.locator('#account-email').fill(email);await page.locator('#account-password').fill(password);await page.locator('#account-confirm').fill(password);await page.locator('#account-submit').click();
- await expect(page.locator('#account-error')).toContainText('Account cannot be created');
+ // Same reply as a new signup: the form never reveals whether an email already has an account.
+ await expect(page.locator('#verification-fields')).toBeVisible();await expect(page.locator('#account-error')).toBeHidden();
 });
 
 test('cinematic landing is accessible, reduced-motion safe and fits small and tablet screens',async({page},info)=>{

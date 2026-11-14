@@ -14,9 +14,13 @@ from sqlalchemy import select, delete, func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .database import Database
-from .models import PasswordReset, PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, Product, CartItem, MarketplaceOrder, MarketplaceOrderItem, now, uid
-from .schemas import ResetRequest, ResetPassword, AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, ProductCreate, ProductUpdate, StockUpdate, CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
-from .emailer import EmailDeliveryError, send_verification, send_password_reset
+from .models import PasswordReset, PendingSignup, User, SessionToken, Batch, Order, Statement, StatementLine, Claim, Job, Match, Run, Allocation, AuditEvent, Content, CreditLedger, DecisionLog, now, uid
+from .schemas import ResetRequest, ResetPassword, AllocationPlan, ImportProvenance, VerifyEmail, ResendEmail, Register, Login, BatchCreate, OrderInput, OrderUpdate, ClaimUpdate, Decision, Reset, ExtractionRequest, ContentWrite, RetryExtraction, DeleteAccount, TotpCode, TotpLogin
+from .emailer import EmailDeliveryError, send_verification, send_password_reset, send_existing_account_notice, send_signin_alert
+from .limits import RateLimiter, HeavySlots, Busy
+from .ledger import remove_batch, used_amounts, ledger_rows, log_decision
+from .passwords import is_breached
+from . import totp
 from .security import password_hash, verify_password, issue_session, token_digest, csrf_token
 from .parsing import paisa, parse_time, parse_orders, parse_statement, csv_export
 from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavailable, enqueue_deletion, drain_deletions
@@ -49,6 +53,7 @@ def user_record(user):
         "display_name": user.display_name,
         "email_verified": bool(user.email_verified_at),
         "is_admin": bool(getattr(user, "is_admin", False)),
+        "two_step_enabled": bool(getattr(user, "totp_enabled_at", None)),
     }
 
 def import_provenance(raw, declared):
@@ -86,14 +91,50 @@ def create_app(settings=None):
         stop.set()
         if thread: thread.join(timeout=3)
         database.engine.dispose()
-    app = FastAPI(title="Milaan Backend", version="1.0.0", description="Persistent seller-scoped reconciliation API. Amounts are integer paisa. Times returned as UTC.", lifespan=lifespan)
+    # Interactive API docs are a map for attackers and load third-party scripts: off in production.
+    docs = {} if settings.app_env != "production" else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    app = FastAPI(title="Milaan Backend", version="1.0.0", description="Persistent seller-scoped reconciliation API. Amounts are integer paisa. Times returned as UTC.", lifespan=lifespan, **docs)
     app.state.database, app.state.settings, app.state.receipt_storage = database, settings, storage
-    app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing, production=settings.app_env == 'production')
+    connect_extra = "" if settings.app_env == "production" else "".join(" " + o for o in settings.cors_origins)
+    app.add_middleware(GuardMiddleware, limit=settings.max_request_bytes, testing=settings.testing, production=settings.app_env == 'production',
+                       trust_proxy=settings.trust_proxy_headers, connect_extra=connect_extra)
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-CSRF-Token"], expose_headers=["Content-Disposition"])
     app.add_middleware(CanonicalOriginMiddleware, settings=settings)
     bearer = HTTPBearer(auto_error=False)
+    heavy = HeavySlots(settings.heavy_slots)
+    # Failed sign-ins: 5 per account per network, 20 per account across networks, per 15 min.
+    # No hard account lock, so a stranger cannot lock a seller out from one connection.
+    failed_by_pair, failed_by_email = RateLimiter(5, 900), RateLimiter(20, 900)
+    alerts, signup_notices = RateLimiter(1, 3600), RateLimiter(1, 3600)
+    totp_challenges, totp_lock = {}, threading.Lock()
+    log = logging.getLogger('milaan.api')
+
+    def client_ip(request):
+        return request.scope.get('state', {}).get('client_ip') or (request.client.host if request.client else 'unknown')
+
+    def background(fn, *args):
+        def run():
+            try: fn(*args)
+            except Exception: log.warning('Security notification email failed (reason=delivery)')
+        threading.Thread(target=run, daemon=True).start()
+
+    def strong_password(password):
+        if settings.check_breached_passwords and is_breached(password):
+            raise HTTPException(422, 'This password appears in known data breaches. Choose a different one.')
+
+    @app.exception_handler(Busy)
+    async def busy(request, exc):
+        if exc.per_user:
+            return JSONResponse({"detail": "Your previous upload is still being processed. Wait for it to finish."}, 429)
+        return JSONResponse({"detail": "Milaan is busy processing other files. Try again in a minute."}, 503, headers={"Retry-After": "30"})
+
+    @app.exception_handler(Exception)
+    async def unexpected(request, exc):
+        # Logged without request data so Render logs show failures without leaking records.
+        log.error('Unhandled error on %s %s (%s)', request.method, request.url.path, type(exc).__name__)
+        return JSONResponse({"detail": "Something went wrong on our side. Try again; if it keeps happening, contact support."}, 500)
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exc):
@@ -217,7 +258,15 @@ def create_app(settings=None):
     def register(body: Register, request: Request, response: Response, db=Depends(get_db)):
         if body.session_mode == "cookie": check_origin(request, settings)
         if not settings.registration_open: raise HTTPException(403, "Registration is disabled")
-        if db.scalar(select(User).where(User.email == str(body.email).lower())): raise HTTPException(409, "Account cannot be created with this email")
+        existing = db.scalar(select(User).where(User.email == str(body.email).lower()))
+        if existing and settings.require_email_verification:
+            # Same reply as a new signup, so the form cannot reveal who has an account.
+            password_hash(body.password)  # keep timing similar to a real signup
+            if signup_notices.hit(existing.email): background(send_existing_account_notice, settings, existing.email)
+            return {"verification_required": True, "challenge_id": secrets.token_urlsafe(32), "email": existing.email,
+                    "expires_in": 600, "resend_after": 60}
+        if existing: raise HTTPException(409, "Account cannot be created with this email")
+        strong_password(body.password)
         if settings.require_email_verification:
             email = str(body.email).lower()
             pending = db.scalar(select(PendingSignup).where(PendingSignup.email == email).with_for_update())
@@ -243,21 +292,54 @@ def create_app(settings=None):
     @app.post('/api/auth/login', tags=['auth'])
     def login(body: Login, request: Request, response: Response, db=Depends(get_db)):
         if body.session_mode == 'cookie': check_origin(request, settings)
-        user = db.scalar(select(User).where(User.email == str(body.email).lower()).with_for_update())
-        locked = bool(user and user.login_locked_until and user.login_locked_until > now())
-        valid = verify_password(body.password, user.password_hash if user and not locked else DUMMY_PASSWORD_HASH)
-        if not user or locked or not valid:
-            if user and not locked:
-                if user.login_locked_until: user.failed_logins, user.login_locked_until = 0, None
-                user.failed_logins += 1
-                if user.failed_logins >= 5: user.login_locked_until = now()+timedelta(minutes=15)
-                db.commit()
-            raise HTTPException(401, 'Incorrect email or password, or account temporarily unavailable. Try again later.')
+        email, ip = str(body.email).lower(), client_ip(request)
+        pair = email + '|' + ip
+        if failed_by_pair.blocked(pair) or failed_by_email.blocked(email):
+            raise HTTPException(429, 'Too many failed sign-ins for this account. Wait 15 minutes or reset your password.')
+        user = db.scalar(select(User).where(User.email == email))
+        valid = verify_password(body.password, user.password_hash if user else DUMMY_PASSWORD_HASH)
+        if not user or not valid:
+            failed_by_pair.hit(pair)
+            if not failed_by_email.hit(email) or failed_by_email.count(email) >= failed_by_email.limit:
+                if user and alerts.hit(email): background(send_signin_alert, settings, user.email)
+            raise HTTPException(401, 'Incorrect email or password.')
+        failed_by_pair.reset(pair)
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
         user.failed_logins, user.login_locked_until = 0, None
         if not user.password_hash.startswith('scrypt-v2$'): user.password_hash = password_hash(body.password)
+        if user.totp_enabled_at:
+            db.commit()
+            challenge = secrets.token_urlsafe(48)
+            with totp_lock:
+                for key in [k for k, v in totp_challenges.items() if v['expires'] < now()]: del totp_challenges[key]
+                totp_challenges[challenge] = {'user_id': user.id, 'mode': body.session_mode, 'remember': body.remember_me,
+                                              'expires': now() + timedelta(minutes=5), 'attempts': 0}
+            return {'totp_required': True, 'challenge_id': challenge, 'expires_in': 300}
         token = session_result(db, user.id, body.session_mode, request, response, settings, body.remember_me)
         db.commit()
         return {**token, 'user':user_record(user)}
+
+    @app.post('/api/auth/totp/verify-login', tags=['auth'])
+    def totp_login(body: TotpLogin, request: Request, response: Response, db=Depends(get_db)):
+        with totp_lock:
+            pending = totp_challenges.get(body.challenge_id)
+            if not pending or pending['expires'] < now():
+                totp_challenges.pop(body.challenge_id, None)
+                raise HTTPException(400, 'Sign-in expired. Enter your email and password again.')
+            pending['attempts'] += 1
+            if pending['attempts'] > 5:
+                totp_challenges.pop(body.challenge_id, None)
+                raise HTTPException(429, 'Too many incorrect codes. Enter your email and password again.')
+        if pending['mode'] == 'cookie': check_origin(request, settings)
+        user = db.scalar(select(User).where(User.id == pending['user_id']).with_for_update())
+        step = totp.verify(user.totp_secret, body.code, user.totp_last_step) if user and user.totp_enabled_at else None
+        if step is None:
+            db.commit(); raise HTTPException(400, 'Incorrect code. Check your authenticator app.')
+        with totp_lock: totp_challenges.pop(body.challenge_id, None)
+        user.totp_last_step = step
+        token = session_result(db, user.id, pending['mode'], request, response, settings, pending['remember'])
+        db.commit()
+        return {**token, 'user': user_record(user)}
 
     @app.post('/api/auth/logout', status_code=204, tags=['auth'])
     def logout(request: Request, user=Depends(current_user), db=Depends(get_db)):
@@ -347,6 +429,7 @@ def create_app(settings=None):
         pending = db.scalar(select(PasswordReset).where(PasswordReset.user_id == pending.user_id, PasswordReset.token_hash == token_digest(body.token)).with_for_update().execution_options(populate_existing=True))
         if not user or not user.email_verified_at or not pending or pending.expires_at <= now():
             raise HTTPException(400, 'Reset link is invalid or expired. Request a new one.')
+        strong_password(body.password)
         user.password_hash, user.failed_logins, user.login_locked_until = password_hash(body.password), 0, None
         db.execute(delete(SessionToken).where(SessionToken.user_id == user.id))
         db.delete(pending); db.commit()
@@ -404,7 +487,7 @@ def create_app(settings=None):
         batch = own_batch(db, batch_id, user, True)
         paths = list(db.scalars(select(Claim.image_path).where(Claim.batch_id == batch_id, Claim.image_path.is_not(None))))
         for path in paths: enqueue_deletion(db, storage, path)
-        db.delete(batch); db.commit()
+        remove_batch(db, batch, settings); db.commit()
         drain_deletions(database, storage, limit=1)
         return Response(status_code=204)
 
@@ -490,9 +573,12 @@ def create_app(settings=None):
     async def read_pdf_statement(file: UploadFile = File(...), user=Depends(current_user)):
         """Read a bank or wallet statement PDF into rows for the seller to check. Nothing is saved."""
         raw = await file.read(MAX_PDF_BYTES + 1)
+        from starlette.concurrency import run_in_threadpool
+        def parse():
+            with heavy.hold(user.id):
+                return read_statement_pdf(raw)
         try:
-            from starlette.concurrency import run_in_threadpool
-            result = await run_in_threadpool(read_statement_pdf, raw)
+            result = await run_in_threadpool(parse)
         except StatementPDFError as e:
             raise HTTPException(422, str(e))
         result["filename"] = Path(file.filename or "statement.pdf").name[:200]
@@ -504,11 +590,12 @@ def create_app(settings=None):
         s = db.get(Statement, statement_id)
         if not s: raise HTTPException(404, "Statement not found")
         own_batch(db, s.batch_id, user)
+        lines = list(db.scalars(select(StatementLine).where(StatementLine.statement_id == s.id).order_by(StatementLine.posted_at).offset(offset).limit(limit)))
+        used = used_amounts(db, user.id, [l.credit_key for l in lines])
         items = []
-        for line in db.scalars(select(StatementLine).where(StatementLine.statement_id == s.id).order_by(StatementLine.posted_at).offset(offset).limit(limit)):
+        for line in lines:
             out = record(line)
-            used = db.scalar(select(func.coalesce(func.sum(Allocation.amount_paisa), 0)).where(Allocation.credit_key == line.credit_key))
-            out["unallocated_paisa"] = max(0, line.amount_paisa-used) if line.direction == "CREDIT" else 0
+            out["unallocated_paisa"] = max(0, line.amount_paisa-used.get(line.credit_key, 0)) if line.direction == "CREDIT" else 0
             items.append(out)
         return {"items": items}
 
@@ -533,12 +620,23 @@ def create_app(settings=None):
 
     @app.post("/api/batches/{batch_id}/claims", status_code=201, tags=["claims"])
     async def upload_claim(batch_id: str, file: UploadFile = File(...), order_id: str = Form(...), expected_revision: int = Form(...), user=Depends(current_user), db=Depends(get_db)):
+        # Decode (memory-heavy) before taking any row lock: an awaited decode must never hold
+        # the batch lock, or a second request on the event loop can block the first.
+        raw = await file.read()
+        from starlette.concurrency import run_in_threadpool
+        def decode():
+            with heavy.hold(user.id):
+                return clean_image(raw)
+        try: cleaned, digest = await run_in_threadpool(decode)
+        except ValueError as e: raise HTTPException(422, str(e))
         b = mutable(db, batch_id, user, expected_revision)
         order = db.scalar(select(Order).where(Order.id == order_id, Order.batch_id == b.id))
         if not order: raise HTTPException(404, "Order not found in this batch")
         if db.scalar(select(func.count()).select_from(Claim).where(Claim.batch_id == b.id)) >= settings.max_claims: raise HTTPException(409, "Screenshot limit reached")
-        try: cleaned, digest = clean_image(await file.read())
-        except ValueError as e: raise HTTPException(422, str(e))
+        stored = db.scalar(select(func.count()).select_from(Claim).join(Batch, Batch.id == Claim.batch_id)
+                           .where(Batch.owner_id == user.id, Claim.image_path.is_not(None)))
+        if stored >= settings.max_seller_receipts:
+            raise HTTPException(409, f"Your account holds {stored} screenshots, the most allowed. Delete finished batches to make room.")
         claim_id = uid(); filename = claim_id + ".jpg"
         c = Claim(id=claim_id, batch_id=b.id, order_id=order.id, account_id=order.account_id,
                   filename=Path(file.filename or "receipt.jpg").name[:200], sha256=digest, image_path=filename)
@@ -623,6 +721,11 @@ def create_app(settings=None):
         if settings.extraction_provider != "gemini" or not settings.gemini_key or not settings.gemini_model:
             raise HTTPException(503, "Gemini is not configured. Set server-side GEMINI_API_KEY, GEMINI_MODEL and EXTRACTION_PROVIDER=gemini, or enter fields manually.")
         if not body.consent_to_cloud: raise HTTPException(422, "Explicit consent_to_cloud=true is required; images will be sent to Google")
+        recent = db.scalar(select(func.coalesce(func.sum(Job.total), 0)).join(Batch, Batch.id == Job.batch_id).where(
+            Batch.owner_id == user.id, Job.kind == "extract", Job.created_at > now() - timedelta(hours=24)))
+        pending = db.scalar(select(func.count()).select_from(Claim).where(Claim.batch_id == batch_id, Claim.extraction_status == "pending"))
+        if recent + pending > settings.max_daily_extractions:
+            raise HTTPException(429, f"Daily AI reading limit ({settings.max_daily_extractions} screenshots) reached. Enter details manually or try tomorrow.")
         return job_record(enqueue(db, user, batch_id, "extract", idempotency_key))
 
     @app.post("/api/batches/{batch_id}/reconcile", status_code=202, tags=["jobs"])
@@ -637,20 +740,41 @@ def create_app(settings=None):
         out = record(job); out.pop("lease", None); return out
 
     def get_results(db, b):
+        """All rows for the latest run in a fixed number of queries (no per-row lookups)."""
         if not b.latest_run_id: return []
+        matches = list(db.scalars(select(Match).where(Match.run_id == b.latest_run_id).order_by(Match.order_id)))
+        if not matches: return []
+        orders = {o.id: o for o in db.scalars(select(Order).where(Order.batch_id == b.id))}
+        claims = {c.id: c for c in db.scalars(select(Claim).where(Claim.batch_id == b.id))}
+        candidate_ids = {i for m in matches for i in (m.candidate_ids or [])}
+        lines = {l.id: l for l in db.scalars(select(StatementLine).where(StatementLine.id.in_(candidate_ids)))} if candidate_ids else {}
+        allocations = {}
+        for a in db.scalars(select(Allocation).where(Allocation.match_id.in_([m.id for m in matches]))):
+            allocations.setdefault(a.match_id, []).append(a)
+        keys = [l.credit_key for l in lines.values()]
+        # Funds used elsewhere = all seller allocations + retained ledger, minus this match's own.
+        used_total = used_amounts(db, b.owner_id, keys)
         items = []
-        for m in db.scalars(select(Match).where(Match.run_id == b.latest_run_id).order_by(Match.order_id)):
-            out = record(m); out["order"] = record(db.get(Order, m.order_id))
-            if out["order"] is None: continue
-            out["claim"] = claim_record(db.get(Claim, m.claim_id)) if m.claim_id else None
-            out["candidates"] = [record(l) for l in db.scalars(select(StatementLine).where(StatementLine.id.in_(m.candidate_ids)))] if m.candidate_ids else []
-            for candidate in out["candidates"]:
-                used = db.scalar(select(func.coalesce(func.sum(Allocation.amount_paisa), 0)).where(Allocation.credit_key == candidate["credit_key"], Allocation.match_id != m.id))
-                candidate["remaining_paisa"] = max(0, candidate["amount_paisa"] - used)
-                candidate["available"] = candidate["remaining_paisa"] >= out["order"]["amount_due_paisa"]
-            out["allocations"] = [record(a) for a in db.scalars(select(Allocation).where(Allocation.match_id == m.id))]
-            out["allocated_paisa"] = sum(a["amount_paisa"] for a in out["allocations"])
-            out["outstanding_paisa"] = max(0, out["order"]["amount_due_paisa"] - out["allocated_paisa"])
+        for m in matches:
+            order = orders.get(m.order_id)
+            if order is None: continue
+            out = record(m); out["order"] = record(order)
+            out["claim"] = claim_record(claims.get(m.claim_id)) if m.claim_id else None
+            own = allocations.get(m.id, [])
+            own_by_key = {}
+            for a in own: own_by_key[a.credit_key] = own_by_key.get(a.credit_key, 0) + a.amount_paisa
+            out["candidates"] = []
+            for line_id in (m.candidate_ids or []):
+                line = lines.get(line_id)
+                if not line: continue
+                candidate = record(line)
+                used = used_total.get(line.credit_key, 0) - own_by_key.get(line.credit_key, 0)
+                candidate["remaining_paisa"] = max(0, line.amount_paisa - used)
+                candidate["available"] = candidate["remaining_paisa"] >= order.amount_due_paisa
+                out["candidates"].append(candidate)
+            out["allocations"] = [record(a) for a in own]
+            out["allocated_paisa"] = sum(a.amount_paisa for a in own)
+            out["outstanding_paisa"] = max(0, order.amount_due_paisa - out["allocated_paisa"])
             items.append(out)
         return items
 
@@ -662,7 +786,7 @@ def create_app(settings=None):
     @app.post("/api/batches/{batch_id}/allocation-review", tags=["results"])
     def allocation_plan(batch_id: str, body: AllocationPlan, idempotency_key: str = Header(...), user=Depends(current_user), db=Depends(get_db)):
         batch = own_batch(db, batch_id, user, True)
-        return review_allocations(db, batch, user, body, idempotency_key)
+        return review_allocations(db, batch, user, body, idempotency_key, settings)
 
     @app.post("/api/matches/{match_id}/decision", tags=["results"])
     def decision(match_id: str, body: Decision, user=Depends(current_user), db=Depends(get_db)):
@@ -684,7 +808,7 @@ def create_app(settings=None):
             if not chosen or chosen.batch_id != b.id or chosen.account_id != order.account_id or chosen.amount_paisa != order.amount_due_paisa or chosen.direction != "CREDIT":
                 raise HTTPException(422, "Selected credit cannot cover this order")
             used = db.scalar(select(Allocation).where(Allocation.credit_key == chosen.credit_key, Allocation.match_id != m.id))
-            if used: raise HTTPException(409, "This credit is already assigned")
+            if used or ledger_rows(db, user.id, chosen.credit_key): raise HTTPException(409, "This credit is already assigned")
         db.execute(delete(Allocation).where(Allocation.match_id == m.id)); db.flush()
         if chosen:
             add_allocation(db, owner_id=user.id, batch_id=b.id, match_id=m.id, order_id=m.order_id, claim_id=m.claim_id, line=chosen, amount=chosen.amount_paisa)
@@ -692,6 +816,8 @@ def create_app(settings=None):
         previous = m.final_status
         m.final_status, m.selected_line_id, m.reviewer_reason, m.version = body.decision, chosen.id if chosen else None, body.reason, m.version + 1
         audit(db, b.id, user.id, "review_decision", {"match_id": m.id, "previous": previous, "decision": body.decision, "reason": body.reason, "version": m.version})
+        log_decision(db, settings, owner_id=user.id, batch=b, order=order, decision=body.decision, source="seller",
+                     reason=body.reason, transaction_id=chosen.transaction_id if chosen else "")
         db.commit(); return record(m)
 
     @app.get("/api/batches/{batch_id}/export.csv", tags=["exports"])
@@ -708,6 +834,79 @@ def create_app(settings=None):
     def events(batch_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user=Depends(current_user), db=Depends(get_db)):
         own_batch(db, batch_id, user)
         return {"items": [record(e) for e in db.scalars(select(AuditEvent).where(AuditEvent.batch_id == batch_id).order_by(AuditEvent.created_at.desc()).offset(offset).limit(limit))]}
+
+    @app.get("/api/decisions", tags=["records"])
+    def decisions(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user=Depends(current_user), db=Depends(get_db)):
+        """Long-lived SHIP/HOLD record (kept after batches expire), newest first."""
+        q = select(DecisionLog).where(DecisionLog.owner_id == user.id, DecisionLog.retain_until > now()).order_by(DecisionLog.created_at.desc()).offset(offset).limit(limit)
+        return {"items": [record(d) for d in db.scalars(q)], "offset": offset, "limit": limit}
+
+    @app.get("/api/decisions.csv", tags=["records"])
+    def decisions_csv(user=Depends(current_user), db=Depends(get_db)):
+        rows = db.scalars(select(DecisionLog).where(DecisionLog.owner_id == user.id, DecisionLog.retain_until > now()).order_by(DecisionLog.created_at.desc()).limit(50000))
+        data = csv_export(["decided_at_utc", "batch", "order_ref", "amount_pkr", "decision", "decided_by", "reason", "transaction_id"],
+                          [[d.created_at.isoformat() + "Z", d.batch_name, d.order_ref, f"{d.amount_paisa/100:.2f}", d.decision, d.source, d.reason, d.transaction_id] for d in rows])
+        return Response(data, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="milaan-decisions.csv"'})
+
+    @app.get("/api/account/export", tags=["account"])
+    def export_account(user=Depends(current_user), db=Depends(get_db)):
+        """Everything Milaan holds about this seller, as JSON (receipt images are listed, not embedded)."""
+        out = {"exported_at": now().isoformat() + "Z", "account": user_record(user) | {"created_at": user.created_at.isoformat() + "Z"},
+               "settings": [{"key": c.key, "value": c.value} for c in db.scalars(select(Content).where(Content.owner_id == user.id))],
+               "batches": [], "used_credits": [record(r) for r in db.scalars(select(CreditLedger).where(CreditLedger.owner_id == user.id))],
+               "decisions": [record(d) for d in db.scalars(select(DecisionLog).where(DecisionLog.owner_id == user.id))]}
+        for b in db.scalars(select(Batch).where(Batch.owner_id == user.id).order_by(Batch.created_at)):
+            out["batches"].append({"batch": record(b),
+                "orders": [record(o) for o in db.scalars(select(Order).where(Order.batch_id == b.id))],
+                "statements": [record(s) for s in db.scalars(select(Statement).where(Statement.batch_id == b.id))],
+                "statement_lines": [record(l) for l in db.scalars(select(StatementLine).where(StatementLine.batch_id == b.id))],
+                "receipts": [claim_record(c) for c in db.scalars(select(Claim).where(Claim.batch_id == b.id))],
+                "results": get_results(db, b),
+                "history": [record(e) for e in db.scalars(select(AuditEvent).where(AuditEvent.batch_id == b.id))]})
+        body = json.dumps(out, default=str, ensure_ascii=False)
+        return Response(body, media_type="application/json", headers={"Content-Disposition": 'attachment; filename="milaan-my-data.json"'})
+
+    @app.post("/api/account/delete", tags=["account"])
+    def delete_account(body: DeleteAccount, request: Request, user=Depends(current_user), db=Depends(get_db)):
+        """Permanently delete the account, every batch, record and receipt image."""
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if not verify_password(body.password, user.password_hash):
+            raise HTTPException(403, "Password is incorrect. Your account was not deleted.")
+        for key in db.scalars(select(Claim.image_path).join(Batch, Batch.id == Claim.batch_id).where(Batch.owner_id == user.id, Claim.image_path.is_not(None))):
+            enqueue_deletion(db, storage, key)
+        db.execute(delete(PendingSignup).where(PendingSignup.email == user.email))
+        db.delete(user)  # cascades: sessions, batches, orders, statements, results, ledger, decisions, settings
+        db.commit()
+        drain_deletions(database, storage, limit=20)
+        response = Response(status_code=204)
+        response.delete_cookie(settings.cookie_name, path='/', secure=settings.cookie_secure, httponly=True, samesite='lax')
+        return response
+
+    @app.post("/api/auth/totp/setup", tags=["auth"])
+    def totp_setup(user=Depends(current_user), db=Depends(get_db)):
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if user.totp_enabled_at: raise HTTPException(409, "Two-step sign-in is already on. Turn it off first to change apps.")
+        user.totp_secret, user.totp_last_step = totp.new_secret(), None
+        db.commit()
+        return {"secret": user.totp_secret, "otpauth_uri": totp.provisioning_uri(user.totp_secret, user.email)}
+
+    @app.post("/api/auth/totp/enable", tags=["auth"])
+    def totp_enable(body: TotpCode, user=Depends(current_user), db=Depends(get_db)):
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if user.totp_enabled_at: return user_record(user)
+        step = totp.verify(user.totp_secret, body.code) if user.totp_secret else None
+        if step is None: raise HTTPException(400, "That code did not match. Check the time on your phone and try the newest code.")
+        user.totp_enabled_at, user.totp_last_step = now(), step
+        db.commit(); return user_record(user)
+
+    @app.post("/api/auth/totp/disable", tags=["auth"])
+    def totp_disable(body: TotpCode, user=Depends(current_user), db=Depends(get_db)):
+        user = db.scalar(select(User).where(User.id == user.id).with_for_update())
+        if not user.totp_enabled_at: return user_record(user)
+        step = totp.verify(user.totp_secret, body.code, user.totp_last_step)
+        if step is None: raise HTTPException(400, "That code did not match. Two-step sign-in is still on.")
+        user.totp_secret, user.totp_enabled_at, user.totp_last_step = None, None, None
+        db.commit(); return user_record(user)
 
     @app.api_route('/workspace', methods=['GET', 'HEAD'], include_in_schema=False)
     def protected_workspace(request: Request, db=Depends(get_db)):

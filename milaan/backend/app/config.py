@@ -13,7 +13,9 @@ class Settings:
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
     public_origin: str = field(default_factory=lambda: os.getenv("PUBLIC_ORIGIN", "http://127.0.0.1:8000"))
     cookie_secure: bool = field(default_factory=lambda: flag("SESSION_COOKIE_SECURE", os.getenv("APP_ENV") == "production"))
-    remember_hours: int = 720
+    remember_hours: int = 336
+    trust_proxy_headers: bool = field(default_factory=lambda: flag("TRUST_PROXY_HEADERS", True))
+    check_breached_passwords: bool = field(default_factory=lambda: flag("CHECK_BREACHED_PASSWORDS", os.getenv("APP_ENV") == "production"))
     database_url: str = field(repr=False, default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///./data/milaan.db"))
     migration_database_url: str = field(repr=False, default_factory=lambda: os.getenv("MIGRATION_DATABASE_URL", ""))
     database_pool_size: int = field(default_factory=lambda: int(os.getenv("DATABASE_POOL_SIZE", "5")))
@@ -48,6 +50,11 @@ class Settings:
     max_rows: int = 2000
     max_image_bytes: int = 10 * 1024 * 1024
     max_request_bytes: int = 12 * 1024 * 1024
+    max_seller_receipts: int = field(default_factory=lambda: int(os.getenv("MAX_SELLER_RECEIPTS", "1000")))
+    max_daily_extractions: int = field(default_factory=lambda: int(os.getenv("MAX_DAILY_EXTRACTIONS", "200")))
+    heavy_slots: int = field(default_factory=lambda: int(os.getenv("HEAVY_UPLOAD_SLOTS", "2")))
+    # Used bank credits and decisions outlive 7-day batches so an old receipt cannot be reused.
+    ledger_days: int = field(default_factory=lambda: int(os.getenv("CREDIT_LEDGER_DAYS", "400")))
     # Demo seller account – auto-created on startup when DEMO_SELLER_EMAIL is set.
     demo_seller_email: str = field(default_factory=lambda: os.getenv("DEMO_SELLER_EMAIL", ""))
     demo_seller_password: str = field(repr=False, default_factory=lambda: os.getenv("DEMO_SELLER_PASSWORD", ""))
@@ -124,5 +131,9 @@ class Settings:
             raise ValueError("EXTRACTION_PROVIDER must be manual or gemini")
         if "*" in self.cors_origins:
             raise ValueError("Set explicit CORS_ORIGINS, not '*'")
+        if not 1 <= self.heavy_slots <= 16:
+            raise ValueError("HEAVY_UPLOAD_SLOTS must be between 1 and 16")
+        if not 30 <= self.ledger_days <= 3650:
+            raise ValueError("CREDIT_LEDGER_DAYS must be between 30 and 3650")
         if not 1 <= self.retention_hours <= 8760:
             raise ValueError("BATCH_RETENTION_HOURS must be between 1 and 8760")

@@ -44,3 +44,28 @@
 /* landing header on very small phones */
 .header-signin{white-space:nowrap}
 @media (max-width:400px){.site-header .header-actions{gap:8px}.site-header .btn-small{padding-left:12px;padding-right:12px}.site-header .btn-small .icon{display:none}.header-signin{font-size:14px}}
+
+/* Accessibility (WCAG 2.2 AA contrast): the guide dialog kept the old light background while
+   its text took the dark theme's pale colours; the sidebar logo and counter were dark-on-dark. */
+dialog#help-dialog.help-dialog{background:linear-gradient(145deg,#20213bf2,#0f2030f8);border:1px solid #bcb7fa40;color:#e6ecfb}
+dialog#help-dialog .dark-label{color:#a9bcef}
+dialog#help-dialog #help-title{color:#f3f5ff}
+dialog#help-dialog .help-steps,dialog#help-dialog .help-steps b{color:#eef3ff}
+dialog#help-dialog .help-steps p{color:#c3d1ea}
+dialog#help-dialog .help-steps strong{color:#ffffff}
+.sidebar .brand{color:#e6f5ea}
+#nav-count{background:#2d3552;color:#e3eaff;border-radius:4px;padding:2px 6px;font-size:10px}
+
+/* Settings: security and your data */
+.settings-security h3{font-size:14px;margin:22px 0 6px;color:#eef3ff}
+.settings-security p{max-width:72ch}
+.settings-security .setup-key code{font-size:15px;letter-spacing:.06em;padding:6px 10px;border-radius:8px;background:#0b1424;color:#e9f1ff;user-select:all}
+.settings-security .button-row{display:flex;flex-wrap:wrap;gap:10px}
+.btn.btn-danger{background:#7a1f2b;color:#fff;border:1px solid #b33a4a}
+.btn.btn-danger:hover{background:#932536}
+dialog#help-dialog .help-limit b{color:#b6ecc0}
+.paper-mini{background-color:#1d2740}
+.paper-mini.paper-back{z-index:1}
+.paper-mini b{background:#1d4a3e;color:#c4fbe6}.paper-mini>span{color:#c9d6ee}
+.compare-art>span{background:#0e2230;border-color:#64dcb52b;color:#d7f5ed}
+.scenario-record .record-kicker{color:#b4c3e2}

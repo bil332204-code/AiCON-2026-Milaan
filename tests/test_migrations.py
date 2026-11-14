@@ -16,8 +16,9 @@ def test_unique_index_upgrade_preserves_records(tmp_path):
     migrate('upgrade', '20261010_marketplace')
     with sqlite3.connect(database) as db:
         db.execute("INSERT INTO products (id,name,description,sku,category,purchase_price_paisa,selling_price_paisa,stock_quantity,low_stock_threshold,is_active,created_at,updated_at) VALUES ('synthetic','Mug','','DEMO-SKU','General',100,200,1,1,1,'2026-10-24','2026-10-24')")
-    for target in ['head', '20261010_marketplace', 'head']:
-        migrate('downgrade' if target != 'head' else 'upgrade', target)
+    before_hardening = '20261025_receipt_deletions'
+    for target, step in [(before_hardening, 'upgrade'), ('20261010_marketplace', 'downgrade'), (before_hardening, 'upgrade')]:
+        migrate(step, target)
         with sqlite3.connect(database) as db:
             assert db.execute('SELECT sku FROM products').fetchall() == [('DEMO-SKU',)]
             for table, column in [('products', 'sku'), ('marketplace_orders', 'order_number')]:
@@ -25,6 +26,12 @@ def test_unique_index_upgrade_preserves_records(tmp_path):
                 assert any(row[2] and db.execute(f'PRAGMA index_info({row[1]})').fetchall()[0][2] == column for row in indexes)
             with pytest.raises(sqlite3.IntegrityError):
                 db.execute("INSERT INTO products SELECT 'duplicate', name, description, sku, category, purchase_price_paisa, selling_price_paisa, stock_quantity, low_stock_threshold, is_active, image_url, created_at, updated_at FROM products")
+    # The security-hardening migration removes the unused marketplace tables and adds the
+    # long-lived credit ledger and decision log.
+    migrate('upgrade', 'head')
+    with sqlite3.connect(database) as db:
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert 'products' not in tables and {'credit_ledger', 'decision_log'} <= tables
     migrate('check')
 
 

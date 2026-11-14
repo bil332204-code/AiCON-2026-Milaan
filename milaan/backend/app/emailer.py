@@ -107,3 +107,19 @@ def send_password_reset(settings, email, token):
     _send(settings, email, 'Reset your Milaan password',
           'Reset your password using this one-time link (expires in 15 minutes):\n\n'
           + url + '\n\nIf you did not request this, ignore this email. Never share the link.')
+
+
+def send_existing_account_notice(settings, email):
+    """Someone tried to sign up with an address that already has an account. The signup
+    reply looks the same either way, so only the real owner learns it happened."""
+    _send(settings, email, 'Someone tried to create a Milaan account with your email',
+          'Someone tried to create a new Milaan account using this email address, which already has an account.\n\n'
+          'If it was you, sign in instead, or use "Forgot password?" on the sign-in page: '
+          + settings.public_origin + '/login\n\nIf it was not you, you can ignore this email. Your account was not changed.')
+
+
+def send_signin_alert(settings, email):
+    _send(settings, email, 'Several failed sign-in attempts on your Milaan account',
+          'There were several failed attempts to sign in to your Milaan account in the last few minutes, '
+          'from more than one network.\n\nIf this was not you, your password has not been shared by Milaan, '
+          'but consider changing it and turning on two-step sign-in in Settings: ' + settings.public_origin + '/login\n')
