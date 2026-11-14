@@ -14,7 +14,7 @@ class Settings:
     public_origin: str = field(default_factory=lambda: os.getenv("PUBLIC_ORIGIN", "http://127.0.0.1:8000"))
     cookie_secure: bool = field(default_factory=lambda: flag("SESSION_COOKIE_SECURE", os.getenv("APP_ENV") == "production"))
     remember_hours: int = 336
-    trust_proxy_headers: bool = field(default_factory=lambda: flag("TRUST_PROXY_HEADERS", True))
+    trust_proxy_headers: bool = field(default_factory=lambda: flag("TRUST_PROXY_HEADERS", os.getenv("APP_ENV") == "production"))
     check_breached_passwords: bool = field(default_factory=lambda: flag("CHECK_BREACHED_PASSWORDS", os.getenv("APP_ENV") == "production"))
     database_url: str = field(repr=False, default_factory=lambda: os.getenv("DATABASE_URL", "sqlite:///./data/milaan.db"))
     migration_database_url: str = field(repr=False, default_factory=lambda: os.getenv("MIGRATION_DATABASE_URL", ""))

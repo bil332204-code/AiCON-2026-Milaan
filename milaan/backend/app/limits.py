@@ -24,23 +24,17 @@ def trusted_peer(peer):
 
 
 def client_ip(scope, trust_proxy=True):
-    """Real client address. Behind Render, every socket peer is 127.0.0.1, so a limit keyed
-    on the peer would be one bucket shared by every visitor. Cloudflare sets and overwrites
-    CF-Connecting-IP; other trusted proxies append the client to X-Forwarded-For."""
+    """Real client address. Behind Render, every socket peer is a private proxy address, so a
+    limit keyed on the peer would be one bucket shared by every visitor. Render runs behind
+    Cloudflare, which overwrites CF-Connecting-IP on every request, so that header cannot be
+    chosen by the client. X-Forwarded-For is not used: Render only appends to it, so its
+    entries can be forged."""
     peer = (scope.get("client") or ("unknown",))[0]
     if not trust_proxy or not trusted_peer(peer):
         return peer
     headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
     candidate = _ip(headers.get("cf-connecting-ip", ""))
-    if candidate:
-        return str(candidate)
-    forwarded = [part for part in headers.get("x-forwarded-for", "").split(",") if part.strip()]
-    # Walk from the nearest hop outwards; the first non-private address is the client.
-    for part in reversed(forwarded):
-        candidate = _ip(part)
-        if candidate and not any(candidate in network for network in _PRIVATE):
-            return str(candidate)
-    return peer
+    return str(candidate) if candidate else peer
 
 
 class RateLimiter:

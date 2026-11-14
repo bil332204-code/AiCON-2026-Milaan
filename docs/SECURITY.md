@@ -8,7 +8,7 @@ What protects Milaan, and what an operator still has to do. Based on the audit o
 | --- | --- |
 | Seller isolation | Every object is looked up through its owner; cross-seller requests return 404 (21 probes tested). |
 | Sign-in | scrypt password hashes; hashed session tokens in a `__Host-` HttpOnly cookie; CSRF token + Origin check; optional authenticator-app (TOTP) step with replay protection; 14-day "remember me". |
-| Brute force | Real client IP from `CF-Connecting-IP` / `X-Forwarded-For`, trusted only from a private proxy hop. 15 auth requests per minute per IP; 5 failed sign-ins per account per network and 20 per account overall per 15 minutes; no hard account lock. Owner is emailed about repeated failures. |
+| Brute force | Real client IP from `CF-Connecting-IP` (set by Cloudflare, which Render runs behind), trusted only from a private proxy hop and only in production (`TRUST_PROXY_HEADERS`). `X-Forwarded-For` is ignored because Render appends to it without resetting it. 15 auth requests per minute per IP; 5 failed sign-ins per account per network and 20 per account overall per 15 minutes; no hard account lock. Owner is emailed about repeated failures. |
 | Signup | Same reply whether or not the email already has an account; the real owner gets a notice. Breached passwords refused (Have I Been Pwned range API, k-anonymity) when `CHECK_BREACHED_PASSWORDS` is on (default in production). |
 | Statement PDFs | Parsed in a child process with no secrets in its environment, 320 MB memory cap, 15 s CPU cap, 30 s wall cap and bounded decompression (32 MB per stream, 96 MB total). |
 | Images | Pillow 13 limited to JPEG/PNG/WEBP parsers, 25 MP cap, JPEG decoded at reduced scale, re-encoded and stripped of metadata. |

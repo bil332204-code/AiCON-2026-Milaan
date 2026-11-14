@@ -234,5 +234,7 @@ def test_client_ip_trusts_only_private_proxies():
     from app.limits import client_ip
     scope = lambda peer, **h: {"client": (peer, 1), "headers": [(k.replace("_", "-").encode(), v.encode()) for k, v in h.items()]}
     assert client_ip(scope("127.0.0.1", cf_connecting_ip="203.0.113.5")) == "203.0.113.5"
-    assert client_ip(scope("10.0.0.2", x_forwarded_for="198.51.100.1, 203.0.113.7")) == "203.0.113.7"
+    # X-Forwarded-For is appended to, never reset, by Render, so it is ignored.
+    assert client_ip(scope("10.0.0.2", x_forwarded_for="198.51.100.1, 203.0.113.7")) == "10.0.0.2"
+    assert client_ip(scope("127.0.0.1", cf_connecting_ip="203.0.113.5"), trust_proxy=False) == "127.0.0.1"
     assert client_ip(scope("203.0.113.9", cf_connecting_ip="1.2.3.4")) == "203.0.113.9"

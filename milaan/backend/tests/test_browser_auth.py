@@ -154,7 +154,7 @@ def test_rate_limit_uses_the_real_client_ip_behind_the_hosting_proxy(tmp_path):
     from fastapi.testclient import TestClient
     from app.main import create_app
     from app.models import Base
-    settings=Settings(database_url=f'sqlite:///{tmp_path}/proxy.db',migration_database_url='',storage_backend='local',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='')
+    settings=Settings(database_url=f'sqlite:///{tmp_path}/proxy.db',migration_database_url='',storage_backend='local',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='',trust_proxy_headers=True)
     app=create_app(settings);Base.metadata.create_all(app.state.database.engine)
     with TestClient(app, client=('127.0.0.1', 40000)) as client:
         attacker=[client.post('/api/auth/login',headers={'CF-Connecting-IP':'203.0.113.9'},json={'email':f'x{i}@example.com','password':'x'}).status_code for i in range(16)]
