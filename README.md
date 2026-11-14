@@ -1,38 +1,71 @@
-# Milaan — payment evidence reconciliation for online sellers
+# Milaan
 
-**Milaan** helps small sellers compare orders, screenshots and receiving-account statements and make explainable **SHIP / HOLD / REVIEW** decisions. It does **not** connect to banks, authenticate receipts, guarantee settlement or ship products. AI-assisted field extraction is optional, consent-gated and subject to human confirmation.
+**Know which orders are really paid.** Milaan checks customers' payment screenshots against a seller's bank or wallet statement and marks every order **SHIP**, **HOLD** or **REVIEW**, with the reason behind it. It is built for Instagram and WhatsApp sellers and small businesses in Pakistan who are paid by bank transfer, JazzCash or Easypaisa.
 
-[Public website](https://milaan.app) · [Seller guide](https://milaan.app/guide) · [Privacy draft](https://milaan.app/privacy) · [Architecture](docs/ARCHITECTURE.md)
+Live at **[milaan.app](https://milaan.app)** · [Seller guide](https://milaan.app/guide) · [Architecture](docs/ARCHITECTURE.md)
 
-![Synthetic Milaan desktop screenshot](docs/screenshots/v3-home-desktop.png)
+![Milaan home page](docs/screenshots/v3-home-desktop.png)
 
-## What runs where
+## How a seller uses it
 
-The public website is built from this repository's `main` branch by Render using the root `Dockerfile`; FastAPI serves both the site and the API. Deployments are **manual**, not automatic. PostgreSQL and private S3-compatible receipts are required for production; development defaults to SQLite and local files.
+1. **New batch.** Name it (e.g. today's orders) and say which account customers pay into.
+2. **Orders.** Paste them, one per line: `order number, customer name, amount` (commas, tabs or spaces). A CSV upload still works.
+3. **Statement.** Upload the statement **PDF** from the bank or wallet app. Milaan reads the transactions, shows them in an editable table (rows that need a look are highlighted), and only imports after the seller confirms. CSV also works.
+4. **Screenshots.** Attach each customer's payment screenshot to its order, enter or AI-read the amount, date and Transaction ID, and confirm.
+5. **Check payments.** Every order gets SHIP / HOLD / REVIEW. Open any order to see why, record a decision and export the list.
 
-The earlier **ChatGPT Sites** workspace is a **separate historical project** and is **not** the source of the current public website. Changing this repository does not modify that separate Sites app. Historical reports may discuss it and must not be mistaken for current production behavior.
+Anyone can open the **sample shop** from the home page without an account.
 
-The public demo uses invented data and needs no account. A saved workspace requires sign-in; public signups remain closed until owner-approved launch gates pass. Do **not** upload real seller/financial records for unapproved testing.
+Milaan never logs in to a bank and never moves money. It compares the records the seller uploads; the shipping decision is always the seller's.
 
-## Five-line local quick start (Python 3.12)
+## What's in the repository
+
+| Path | What it is |
+|---|---|
+| `milaan/backend/app` | FastAPI app: accounts, batches, imports, statement PDF reader (`statement_pdf.py`), matcher, review decisions, email |
+| `milaan/backend/migrations` | Alembic database migrations |
+| `milaan/backend/tests` | Backend tests (PDF fixtures in `tests/fixtures`, all invented data) |
+| `milaan/frontend/dist` | The website and workspace (plain ES modules, no build step). `seller-flow.js` holds the paste-orders and statement-check flow |
+| `milaan/frontend/tests` | Node tests for the browser modules |
+| `tests/browser` | Playwright tests on desktop and mobile |
+| `Dockerfile` | Production image used by Render |
+| `docs/` | Architecture, import rules, operations, deployment and privacy notes |
+
+## Run it locally (Python 3.12)
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -c milaan/backend/constraints-py312.txt -r milaan/backend/requirements.txt
-.venv/bin/python setup_admin.py
+cp milaan/backend/.env.example milaan/backend/.env      # development defaults: SQLite, local files, signup open
 cd milaan/backend && ../../.venv/bin/python -m alembic upgrade head
 ../../.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Windows: use `SETUP.bat` and `START_DEMO.bat`; both were exercised in a disposable Windows GitHub Actions environment with a synthetic operator. Interactive operator entry still needs local testing. See [README_FIRST.md](README_FIRST.md).
+Open http://127.0.0.1:8000. On Windows, run `SETUP.bat` once, then `START_MILAAN.bat`.
 
-## Guides, implementation and verification
+For local sign-up without email, set `REQUIRE_EMAIL_VERIFICATION=false` in `milaan/backend/.env`.
 
-- [Seller demo and Roman Urdu walkthrough](DEMO_GUIDE_ROMAN_URDU.md) · [Import/matching contract](docs/IMPORT_CONTRACTS.md)
-- [Architecture](docs/ARCHITECTURE.md) · [Privacy and retention notes](docs/PRIVACY.md) · [Integrated release history](docs/V3_RELEASE.md)
-- [Email integration](docs/V4_RESEND_EMAIL.md) · [Deployment safety](docs/RENDER_NEON_READINESS.md) · [Operations runbook](docs/OPERATIONS_RUNBOOK.md)
-- [Public launch checklist](docs/PUBLIC_LAUNCH_GATES.md) · [Change proposals](docs/proposals/PRODUCT_DECISIONS.md) · [Prior review](docs/PUBLIC_LAUNCH_REVIEW.md)
+## Tests
 
-Run the existing GitHub Actions release suite before approving any pull request. Backend, PostgreSQL/S3 synthetic, frontend, browser, migrations, Windows launch and public HTTPS checks have separate workflows and distinct limits. Historical reports reflect **their original dates**; they are not an assertion that today's live services were tested in those older sessions. Never use real financial records for tests.
+```sh
+cd milaan/backend && python -m pytest tests matching/tests      # backend
+node --test milaan/frontend/tests/*.test.mjs                    # frontend modules
+cd tests/browser && npm ci && npm test                          # browser flows (desktop + mobile)
+```
 
-**Source code has no public-product license yet.** Do not assume an open-source grant until the owner chooses one.
+Never use real customer or bank records in tests. The statement PDF fixtures are regenerated with `python milaan/backend/tests/fixtures/make_statement_pdfs.py`.
+
+## Production
+
+milaan.app runs from this repository's `main` branch on Render (Docker) with PostgreSQL on Neon, private S3-compatible storage for screenshots and Resend for email. Deploys are manual. Settings that control public behaviour live in Render's environment, not in code:
+
+| Setting | Effect |
+|---|---|
+| `ALLOW_REGISTRATION=true` | Lets new sellers create accounts (the site shows "Get started"). When `false`, only existing accounts can sign in. |
+| `REQUIRE_EMAIL_VERIFICATION=true` | New accounts confirm their email with a 6-digit code (needs `RESEND_API_KEY` and `EMAIL_FROM`). |
+| `EXTRACTION_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL` | Optional AI reading of screenshots, only when the seller asks for it. |
+| `BATCH_RETENTION_HOURS` | How long batches are kept (default 168 = 7 days). |
+
+See [operations runbook](docs/OPERATIONS_RUNBOOK.md), [Render/Neon readiness](docs/RENDER_NEON_READINESS.md) and [launch checklist](docs/PUBLIC_LAUNCH_GATES.md).
+
+**License:** none yet. All rights reserved by the owner until a license is chosen.

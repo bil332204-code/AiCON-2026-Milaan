@@ -68,6 +68,7 @@ export class MilaanAPI {
     Object.entries(fields).forEach(([key, value]) => body.append(key, String(value)));
     return this.request(path, { method: 'POST', body });
   }
+  readStatementPDF(file) { const body = new FormData(); body.append('file', file); return this.request('/api/statements/read-pdf', { method: 'POST', body }); }
   uploadOrders(id, file, revision) { return this.upload(`/api/batches/${id}/orders`, file, { expected_revision: revision }); }
   uploadStatement(id, file, revision, metadata) { return this.upload(`/api/batches/${id}/statement`, file, { ...metadata, expected_revision: revision }); }
   uploadClaim(id, orderId, file, revision) { return this.upload(`/api/batches/${id}/claims`, file, { order_id: orderId, expected_revision: revision }); }

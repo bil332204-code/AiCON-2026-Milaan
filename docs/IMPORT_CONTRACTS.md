@@ -33,7 +33,19 @@ The saved API accepts one statement per declared account; conflicting CSV accoun
 are rejected. Browser coverage is shared across all supplied accounts. Both require
 an explicit complete coverage declaration, and verified sender/receiver reference
 correspondence for automatic SHIP. Coverage must come from the export, not be
-inferred from the first/last record. No native PDF parsing exists in this kit.
+inferred from the first/last record.
+
+### Statement PDFs
+
+`POST /api/statements/read-pdf` reads a text-based bank or wallet statement PDF
+(up to 10 MB / 60 pages / 2,000 rows) and returns proposed rows; nothing is stored.
+Debit/credit come from the statement's Debit/Credit (or Amount with Cr/Dr or +/-)
+columns when a header is found, otherwise from wording such as "received from" or
+"sent to". Rows without a time, Transaction ID or clear direction are flagged in
+`needs_check`. The printed statement period is pre-filled when found; otherwise the
+seller enters it. The seller edits/removes rows and confirms coverage before the
+browser imports them through the same CSV validation above. Scanned or
+password-protected PDFs are rejected with an explanation.
 
 ## Critical matching contract
 
@@ -56,7 +68,7 @@ they preserve the machine verdict and do not execute shipping or payments.
 ## V2 reviewed mapping
 
 The Import center now previews and maps source columns before submitting normalized
-CSV. See [Milestone A](V2_MILESTONE_A.md) for timezone selection, row rejection,
+CSV. See Milestone A for timezone selection, row rejection,
 warning behavior and private fingerprint/mapping provenance. Direct API clients may
 continue to submit canonical CSV unchanged. The API accepts optional `provenance`
 JSON; it does not trust this client-declared metadata as bank verification. Import

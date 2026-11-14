@@ -18,18 +18,19 @@ test('seller guide exposes four steps in English and Roman Urdu, with a real lan
   assert.match(guide,/button\.addEventListener\('click'/);
 });
 
-test('all local CTAs use consistent names and do not use external-link arrows',()=>{
-  assert.ok((entry.match(/Try the demo/g)||[]).length>=3);
-  assert.ok((entry.match(/Use your own files/g)||[]).length>=2);
-  assert.doesNotMatch(entry,/Understand the limits <span>↗<\/span>/);
-  assert.doesNotMatch(entry,/Use your own files <span>↗<\/span>/);
-  assert.doesNotMatch(entry,/Open the demo workspace|See Milaan in action|Explore the demo/);
+test('landing CTAs are consistent: start an account, or see the sample shop',()=>{
+  assert.ok((entry.match(/See a demo/g)||[]).length>=2);
+  assert.ok((entry.match(/href="\/signup"/g)||[]).length>=3);
+  assert.match(entry,/data-action="workspace">Sign in/);
+  assert.doesNotMatch(entry,/Use your own files/);
 });
 
-test('landing explains transaction reference source without inventing Milaan ID format',()=>{
-  assert.match(entry,/Milaan does not generate it/);
-  assert.match(entry,/MLN is fictional demo data, not a Milaan ID format/);
-  assert.match(entry,/partial Transaction ID: REVIEW/);
+test('landing reads like a real product, without hackathon disclaimers or invented ID formats',()=>{
+  const landing=entry.split('<div id="landing">')[1].split('<div id="workspace"')[0];
+  assert.doesNotMatch(landing,/illustrative|fictional|synthetic|MLN\d|AICON/i);
+  assert.match(landing,/Know which orders/);
+  assert.match(landing,/Stop shipping on screenshots alone/);
+  assert.match(entry,/partial Transaction ID/);
   assert.match(entry,/24 hours/);
   assert.match(entry,/24 ghantay/);
   assert.doesNotMatch(entry,/Transaction ID \/ Reference number/);
@@ -42,8 +43,8 @@ test('private beta stays honest without removing the anonymous demo or weakening
   assert.match(code,/if\(await existingAccountGate\(\)\)return backend\.open\(\)/);
   assert.match(code,/new signup is closed/);
   assert.match(entry,/data-action="demo"/);
-  assert.match(entry,/Statement CSV help/);
-  assert.match(entry,/Statement CSV ka tareeqa/);
+  assert.match(entry,/Statement tips/);
+  assert.match(entry,/Statement ke liye tips/);
   assert.match(entry,/Stop shipping on screenshots alone/);
   assert.doesNotMatch(entry,/<span>09 Oct 2026<\/span>/);
   const english=entry.match(/<div class="help-limit"><b>When will Milaan automatically suggest SHIP\?<\/b>([\s\S]*?)<\/div>/)?.[1];

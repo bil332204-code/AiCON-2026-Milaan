@@ -1,0 +1,46 @@
+/* Simple seller flow: new-batch dialog, statement check, step cards */
+.seller-dialog,.statement-review{max-width:min(980px,96vw);width:100%}
+.seller-dialog{max-width:520px}
+.seller-form{display:grid;gap:14px}
+.seller-form h2{margin:0;font-size:1.6rem}
+.seller-form .account-intro{margin:0}
+.field-help{margin:-4px 0 0;font-size:.86rem;opacity:.72}
+.dialog-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
+.notice{margin:0;padding:10px 12px;border-radius:10px;background:rgba(242,193,78,.14);border:1px solid rgba(242,193,78,.4);font-size:.9rem}
+.statement-rows{max-height:46vh;overflow:auto;border-radius:12px}
+.statement-rows table{width:100%;border-collapse:collapse;font-size:.88rem}
+.statement-rows th{position:sticky;top:0;text-align:left;padding:8px 6px;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;background:var(--surface,#fff);z-index:1}
+.statement-rows td{padding:4px 6px;border-top:1px solid rgba(127,127,127,.18);vertical-align:middle}
+.statement-rows input,.statement-rows select{width:100%;min-width:0;font:inherit;padding:7px 8px;border-radius:8px;border:1px solid rgba(127,127,127,.35);background:transparent;color:inherit}
+.statement-rows td:nth-child(1){min-width:180px}.statement-rows td:nth-child(3){width:110px}.statement-rows td:nth-child(4){min-width:160px}.statement-rows td:nth-child(5){min-width:150px}
+.statement-rows .needs-check{border-color:#e0a526;background:rgba(242,193,78,.16)}
+.seller-step h2 .step-label{min-width:2em;text-align:center}
+.seller-step.is-done h2 .step-label{background:#2f9e6b;color:#fff}
+.seller-step textarea{font-family:inherit;width:100%;resize:vertical}
+.step-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px}
+.file-link{position:relative;cursor:pointer}
+.file-link input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.compact-table{max-height:280px;overflow:auto;margin-bottom:12px}
+.compact-table table{width:100%;border-collapse:collapse}
+.compact-table td,.compact-table th{padding:8px 10px;text-align:left;border-bottom:1px solid rgba(127,127,127,.15)}
+.csv-help{margin-top:12px}
+.csv-help summary{cursor:pointer;font-weight:600}
+.csv-help[open]{display:grid;gap:10px}
+@media (max-width:720px){.statement-rows table,.statement-rows thead,.statement-rows tbody,.statement-rows tr,.statement-rows td{display:block}.statement-rows thead{display:none}.statement-rows tr{padding:10px 0;border-top:1px solid rgba(127,127,127,.2)}.statement-rows td{border:0}}
+/* dark dialogs to match the workspace */
+.seller-dialog,.statement-review{padding:32px;background:linear-gradient(145deg,#1b2238f5,#0f1b2cf7);color:#e5edfc;border:1px solid #b7caff30;border-radius:20px;max-height:92dvh;overflow:auto}
+.seller-dialog::backdrop,.statement-review::backdrop{background:#070b18d9}
+.seller-form h2{color:#f4f7ff;letter-spacing:-.8px}
+.seller-form .account-intro,.seller-form .field,.seller-form .checkbox-row,.field-help{color:#b5c6df}
+.seller-form .account-intro b{color:#f4f7ff}
+.statement-rows{border:1px solid #b7caff1c}
+.statement-rows th{background:#141e31;color:#9fb0cc}
+.statement-rows input,.statement-rows select{background:#0d182a;color:#edf2ff;border-color:#a9c3ed40}
+.statement-rows select option{background:#0d182a}
+.statement-rows .needs-check{border-color:#e0a526;background:#3a2e10}
+.notice{color:#f4e2b0}
+#workspace .compact-table td{color:#e5edfc}
+#workspace .compact-table th{color:#9fb0cc}
+/* landing header on very small phones */
+.header-signin{white-space:nowrap}
+@media (max-width:400px){.site-header .header-actions{gap:8px}.site-header .btn-small{padding-left:12px;padding-right:12px}.site-header .btn-small .icon{display:none}.header-signin{font-size:14px}}

@@ -16,10 +16,9 @@ def test_legal_pages_are_public_and_reachable_without_login(env,route,title):
     from html import escape
     assert f'<title>{escape(title)} · Milaan</title>' in response.text
     assert f'<link rel="canonical" href="{env[2].public_origin}{route}">' in response.text
-    assert 'Draft for' in response.text
-    assert 'Bilal Ahmed' in response.text and 'Pakistan' in response.text
-    assert 'not yet a registered company' in response.text
-    assert 'not configured yet' in response.text
+    if route != "/about":
+        assert 'Draft for' in response.text
+    assert 'Pakistan' in response.text
     assert 'mailto:' not in response.text
     assert 'no-reply@milaan.app' not in response.text
     for path in ['/guide','/privacy','/terms','/about']:
@@ -35,13 +34,12 @@ def test_home_and_guide_include_reference_explanation_and_bilingual_steps(env):
         assert 'Transaction ID' in response.text
         assert 'Order number' in response.text
         assert 'Transaction ID / Reference number' not in response.text
-        assert 'Milaan does not generate it' in response.text
         assert 'lang="ur-Latn"' in response.text
         assert 'data-guide-language="en"' in response.text
         assert 'data-guide-language="ur"' in response.text
         assert 'backend configuration' not in response.text.lower()
         assert 'configuring the backend' not in response.text.lower()
-        assert 'MLN is fictional demo data' in response.text
+        assert 'MLN' not in response.text and 'fictional' not in response.text.lower()
         for path in ['/privacy','/terms','/about']:
             assert f'href="{path}"' in response.text
 
@@ -83,7 +81,7 @@ def test_public_metadata_uses_configured_origin_not_request_or_query(env, route)
     assert 'untrusted.example.com' not in response.text
     if route == '/guide':
         assert '<title>Seller guide · Milaan</title>' in response.text
-        assert 'Seller instructions in English and Roman Urdu.' in response.text
+        assert 'Guide in English and Roman Urdu.' in response.text
 
 
 @pytest.mark.parametrize('alias,route', [('/index.html','/'), ('/privacy.html','/privacy'),
@@ -124,8 +122,8 @@ def test_registration_gate_is_publicly_honest_without_opening_signup(env):
 def test_public_guide_links_downloadable_synthetic_csvs(env):
     client,_,_=env
     guide=client.get("/guide")
-    assert "Statement CSV help" in guide.text
-    assert "Statement CSV ka tareeqa" in guide.text
+    assert "Statement tips" in guide.text
+    assert "Statement ke liye tips" in guide.text
     for path, expected in [("/samples/orders.csv","order_ref"),("/samples/statement.csv","transaction_id")]:
         response=client.get(path)
         assert response.status_code == 200
@@ -136,7 +134,7 @@ def test_legal_roman_urdu_summary_is_clearly_non_authoritative(env):
     for path in ["/privacy","/terms","/about"]:
         page=client.get(path).text
         assert 'lang="ur-Latn"' in page and "sirf khulasa" in page
-        assert "English draft" in page
+        assert "English" in page
 
 def test_social_metadata_sitemap_and_helpful_missing_route(env):
     client,_,settings=env

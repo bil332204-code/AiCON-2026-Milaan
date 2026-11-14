@@ -9,7 +9,7 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 ".venv\Scripts\python.exe" setup_admin.py
 if errorlevel 1 goto fail
-echo Setup complete. Run START_DEMO.bat next.
+echo Setup complete. Run START_MILAAN.bat next, then open http://127.0.0.1:8000
 pause
 exit /b 0
 :fail

@@ -26,7 +26,7 @@ async function signup(page,email){
  await page.locator('#account-password').fill(password);await page.locator('#account-confirm').fill(password);
  await page.locator('#account-submit').click();await expect(page.locator('#verification-fields')).toBeVisible();
  await page.locator('#account-code').fill(await mail('verification',email));await page.locator('#account-submit').click();
- await expect(page.getByRole('heading',{name:'Your work, saved.'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
 }
 
 test('independent signup, verification, refresh, recovery and private user isolation',async({page,browser},info)=>{
@@ -43,15 +43,15 @@ test('independent signup, verification, refresh, recovery and private user isola
  await page.locator('#password-toggle').click();await page.locator('#account-confirm').fill(password);await page.locator('#account-submit').click();
  await expect(page.locator('#verification-fields')).toBeVisible();
  await page.locator('#account-code').fill(await mail('verification',email));await page.locator('#account-submit').click();
- await expect(page.getByRole('heading',{name:'Your work, saved.'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
  const cookies=await page.context().cookies();expect(cookies.find(c=>c.name==='milaan_session')?.httpOnly).toBe(true);
  expect(await page.evaluate(()=>document.cookie.includes('milaan_session'))).toBe(false);
  expect(await page.evaluate(()=>Object.keys(localStorage).some(key=>/token|password|session/i.test(key)))).toBe(false);
- const batchName=`Synthetic V3 private ${info.project.name}`;page.once('dialog',dialog=>dialog.accept(batchName));
- await page.getByRole('button',{name:'New batch',exact:true}).first().click();
- await expect(page.locator('[data-upload="orders"]')).toBeVisible();
+ const batchName=`Synthetic V3 private ${info.project.name}`;
+ await page.locator('.intro-actions [data-action="new"]').click();await page.locator('.seller-dialog input[name="name"]').fill(batchName);await page.locator('.seller-dialog input[name="account"]').fill('wallet');await page.getByRole('button',{name:'Create batch',exact:true}).click();
+ await expect(page.locator('#paste-orders')).toBeVisible();
  const batchId=new URL(page.url()).searchParams.get('batch');expect(batchId).toBeTruthy();
- await page.reload();await expect(page.locator('[data-upload="orders"]')).toBeVisible();
+ await page.reload();await expect(page.locator('#paste-orders')).toBeVisible();
  const sibling=await page.context().newPage();await sibling.goto('/workspace');await expect(sibling.locator(`[data-batch-id="${batchId}"]`)).toBeVisible();
  await page.locator('[data-action="settings"]').click();await page.getByRole('button',{name:'Sign out',exact:true}).click();
  await expect(sibling.locator('#account-dialog')).toBeVisible();await expect(sibling.locator(`[data-batch-id="${batchId}"]`)).toHaveCount(0);await sibling.close();
@@ -70,7 +70,7 @@ test('independent signup, verification, refresh, recovery and private user isola
  const remembered=(await page.context().cookies()).find(c=>c.name==='milaan_session');expect(remembered.expires).toBeGreaterThan(Date.now()/1000+20*86400);
  const secondContext=await browser.newContext({baseURL:'http://127.0.0.1:8765',viewport:info.project.use.viewport});const second=await secondContext.newPage();
  await signup(second,`other-v3-${info.project.name}@example.com`);
- await second.goto('/workspace?batch='+batchId);await expect(second.getByRole('heading',{name:'Your work, saved.'})).toBeVisible();
+ await second.goto('/workspace?batch='+batchId);await expect(second.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
  await expect(second.locator(`[data-batch-id="${batchId}"]`)).toHaveCount(0);
  await secondContext.close();
  await page.locator('[data-action="settings"]').click();await page.getByRole('button',{name:'Sign out',exact:true}).click();
@@ -80,17 +80,17 @@ test('independent signup, verification, refresh, recovery and private user isola
 
 test('cinematic landing is accessible, reduced-motion safe and fits small and tablet screens',async({page},info)=>{
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
- await page.goto('/');await expect(page.getByRole('heading',{level:1})).toHaveAccessibleName('Every payment. In its right place.');
+ await page.goto('/');await expect(page.getByRole('heading',{level:1})).toHaveAccessibleName('Know which orders are really paid.');
  await expect(page.locator('.headline-word').last()).toHaveCSS('opacity','1');
  await page.screenshot({path:`../../docs/screenshots/v3-home-${info.project.name}.png`});
  await page.locator('#observatory-title').scrollIntoViewIfNeeded();await expect(page.locator('[data-demo-count="12"]')).toHaveText('12');
- await page.getByRole('tab',{name:/missing credit/}).click();await expect(page.locator('#scenario-stage')).toContainText('Hold');await page.keyboard.press('ArrowRight');await expect(page.getByRole('tab',{name:/reused proof/})).toHaveAttribute('aria-selected','true');await page.keyboard.press('ArrowLeft');await expect(page.locator('#scenario-stage')).toContainText('Hold');
- await page.getByRole('button',{name:'Understand the limits'}).click();await expect(page.locator('#help-dialog')).toBeVisible();await page.getByRole('button',{name:/Got it/}).click();
+ await page.getByRole('tab',{name:/never arrived/}).click();await expect(page.locator('#scenario-stage')).toContainText('Hold');await page.keyboard.press('ArrowRight');await expect(page.getByRole('tab',{name:/two orders/})).toHaveAttribute('aria-selected','true');await page.keyboard.press('ArrowLeft');await expect(page.locator('#scenario-stage')).toContainText('Hold');
+ await page.getByRole('button',{name:'Read the guide'}).click();await expect(page.locator('#help-dialog')).toBeVisible();await page.getByRole('button',{name:/Got it/}).click();
  await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
  await expect(page.locator('.ambient-mesh')).toHaveCount(1);
  expect(await page.locator('.ambient-orb').first().evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
  expect(await page.locator('.headline-word').first().evaluate(el=>getComputedStyle(el).opacity)).toBe('1');
- for(const width of [320,768]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('.hero-actions [data-action="new"]').click();await expect(page.locator('#account-dialog')).toBeVisible();expect(await page.locator('#account-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.locator('[data-account-close]').click();}
+ for(const width of [320,768]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('.site-header [data-action="workspace"]').click();await expect(page.locator('#account-dialog')).toBeVisible();expect(await page.locator('#account-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);await page.locator('[data-account-close]').click();}
  const metrics=await page.evaluate(()=>({navigationMs:Math.round(performance.getEntriesByType('navigation')[0].duration),domNodes:document.querySelectorAll('*').length,resourceBytes:performance.getEntriesByType('resource').reduce((sum,r)=>sum+(r.transferSize||0),0)}));
  await fs.writeFile(`../../docs/screenshots/v3-performance-${info.project.name}.json`,JSON.stringify(metrics,null,2)+'\n');
  await test.info().attach('local-performance-observation',{body:JSON.stringify(metrics,null,2),contentType:'application/json'});
@@ -100,7 +100,7 @@ test('cinematic landing is accessible, reduced-motion safe and fits small and ta
 test('legacy account confirms its email from an authenticated session before enabling recovery',async({page},info)=>{
  const email=`legacy-${info.project.name}@example.com`;
  await page.goto('/login');await page.locator('#account-email').fill(email);await page.locator('#account-password').fill('synthetic-browser-test-password');await page.locator('#account-submit').click();
- await expect(page.getByRole('heading',{name:'Your work, saved.'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
  await page.locator('[data-action="settings"]').click();await page.getByRole('button',{name:'Confirm account email',exact:true}).click();
  await expect(page.locator('#verification-fields')).toBeVisible();await page.locator('#account-code').fill(await mail('verification',email));await page.locator('#account-submit').click();
  await expect(page.locator('#account-dialog')).not.toBeVisible();await expect(page.getByText('Email confirmed · password recovery enabled.',{exact:true})).toBeVisible();
