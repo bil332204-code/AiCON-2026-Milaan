@@ -1,0 +1,42 @@
+/* Layout carried over from the previous theme (colours removed). Loaded before formal.css. */
+.btn{border-radius:11px;min-height:48px}
+.btn:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline-offset:4px}
+.page-intro h1{letter-spacing:-1.4px}
+.field input,.field select,.field textarea,.search-box{border-radius:9px}
+.checkbox-row{line-height:1.6}
+.validation-error{border-radius:10px;padding:12px;line-height:1.65}
+.preview-table{border-radius:8px}
+.account-dialog{width:min(480px,calc(100vw - 32px));max-height:94dvh;overflow:auto;padding:38px;border-radius:16px}
+.account-dialog h2{font-size:35px;line-height:1.15;letter-spacing:-1.4px}
+.account-intro{line-height:1.7;font-size:14px;margin:16px 0 20px}
+.account-dialog form{display:flex;flex-direction:column;gap:16px}
+.account-dialog .field{display:flex;flex-direction:column;gap:9px;font-size:13px}
+.account-dialog input{min-height:47px;width:100%}
+.account-dialog .checkbox-row input{width:18px;min-height:18px;flex-shrink:0}
+.auth-connection{font-size:11px}
+.auth-connection summary{cursor:pointer}
+.auth-connection .field{margin-top:12px}
+.password-input{position:relative}
+.password-input input{padding-right:66px}
+.password-input button{position:absolute;right:8px;top:7px;height:33px;padding:0 10px;border-radius:6px;font-size:12px}
+.account-dialog #account-switch{min-height:36px}
+.account-note{font-size:11px;line-height:1.8;margin-top:26px;padding-top:20px}
+.auth-guidance{font-size:11px;line-height:1.6;margin:10px 0 0}
+.auth-success{padding:12px;border-radius:10px;font-size:13px;line-height:1.6}
+.account-dialog #remember-field{font-size:12px}
+.account-dialog #account-submit{width:100%;margin-top:4px}
+.account-dialog #forgot-password{align-self:flex-end}
+@media(max-width:900px){.table-top{flex-wrap:wrap}}
+@media(max-width:600px){.header-actions{gap:10px}.account-dialog{padding:28px 23px}.account-dialog h2{font-size:31px}.account-dialog .checkbox-row{align-items:start}}
+@media(max-width:360px){.header-actions .btn{font-size:11px;padding:9px 11px}.account-dialog{width:calc(100vw - 20px);padding:27px 18px}.app-header{padding-inline:12px}.mode-chip{font-size:8px}.app-header-right{gap:5px}}
+@media(hover:none),(pointer:coarse){.btn:hover{transform:none}}
+#workspace .customer-name{font-size:13px}
+#workspace .customer-order,#workspace .ref-cell{font-size:11px}
+#workspace .amount-cell{font-size:14px}
+#workspace th{font-size:10px}
+#workspace .filter-btn,#workspace .stat-label{font-size:12px}
+#workspace .stat-card small{font-size:11px}
+#account-form input[type=checkbox]{width:18px;height:18px;min-height:18px;flex:0 0 18px}
+#account-form .checkbox-row span{min-width:0;flex:1}
+#account-form .checkbox-row{min-width:0}
+.btn:focus-visible{transform:none!important}
