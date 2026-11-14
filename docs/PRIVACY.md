@@ -36,7 +36,7 @@ Private audit history includes reviewer reasons and exact source shares. Idempot
 records contain private response snapshots and expire/delete with their batch.
 Partial funding may remain in REVIEW while its credit shares stay reserved. Legacy
 HOLD/REVIEW, reset, deletion and expiry release reservations; no refund is sent.
-See [Milestone B](V2_MILESTONE_B.md) for budget protection and migration requirements.
+See Milestone B for budget protection and migration requirements.
 
 
 V3 browser sessions use HttpOnly cookies, in-memory CSRF material and server-side
@@ -46,7 +46,7 @@ and use one-time hashed server records; recovery is enabled only for proven emai
 Previously unverified local users must confirm the mailbox from an authenticated
 account first. Their IDs, password access and financial ownership are not rewritten.
 Hosted provider identities are not linked by email strings. See
-[V3 migration boundaries](V3_IDENTITY_MIGRATION.md) and [release evidence](V3_RELEASE.md).
+[V3 migration boundaries](V3_IDENTITY_MIGRATION.md) and release evidence.
 
 ### V4 transactional email
 

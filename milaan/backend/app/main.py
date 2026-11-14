@@ -23,6 +23,7 @@ from .storage import clean_image, receipt_storage, StorageMissing, StorageUnavai
 from .middleware import GuardMiddleware, CanonicalOriginMiddleware
 from .jobs import audit, worker_loop
 from .documents import public_document, app_shell
+from .statement_pdf import read_statement_pdf, StatementPDFError, MAX_PDF_BYTES
 
 DUMMY_PASSWORD_HASH = password_hash(secrets.token_urlsafe(32))
 
@@ -484,6 +485,19 @@ def create_app(settings=None):
         db.add_all(StatementLine(batch_id=b.id, statement_id=s.id, **row) for row in data)
         b.revision += 1; audit(db, b.id, user.id, "statement_imported", {"account_id": account_id, "rows": len(data), "coverage_declared": complete, "rejected": 0, "provenance": metadata})
         db.commit(); return {"batch": record(b), "statement": record(s), "line_count": len(data)}
+
+    @app.post("/api/statements/read-pdf", tags=["statements"])
+    async def read_pdf_statement(file: UploadFile = File(...), user=Depends(current_user)):
+        """Read a bank or wallet statement PDF into rows for the seller to check. Nothing is saved."""
+        raw = await file.read(MAX_PDF_BYTES + 1)
+        try:
+            from starlette.concurrency import run_in_threadpool
+            result = await run_in_threadpool(read_statement_pdf, raw)
+        except StatementPDFError as e:
+            raise HTTPException(422, str(e))
+        result["filename"] = Path(file.filename or "statement.pdf").name[:200]
+        result["source_sha256"] = hashlib.sha256(raw).hexdigest()
+        return result
 
     @app.get("/api/statements/{statement_id}/lines", tags=["statements"])
     def statement_lines(statement_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), user=Depends(current_user), db=Depends(get_db)):

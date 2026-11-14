@@ -21,7 +21,7 @@ flowchart TD
 ```
 
 Canonical entry points: `milaan/backend/app/main.py:app`,
-`demo-store/server.py:app`, `milaan/frontend/dist/app.js`.
+`milaan/frontend/dist/app.js`.
 The active saved matcher is `app/matcher.py`; `matching/names.py` supplies name
 similarity. Other matching utilities do not replace the saved engine.
 PostgreSQL configuration exists for shared deployments but was not runtime-tested
@@ -37,4 +37,4 @@ V2 adds `app/allocation_review.py` for atomic human-confirmed payment shares and
 both decision APIs use the same seller lock protocol. Live allocation rows hold
 integer-paisa amounts; private `allocation_reviews` records provide idempotent retry
 snapshots. No separate bank connection or shared hosted database was introduced.
-See [payment allocation design](V2_MILESTONE_B.md).
+See payment allocation design.

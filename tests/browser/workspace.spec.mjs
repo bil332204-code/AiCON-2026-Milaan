@@ -6,17 +6,28 @@ async function confirmImport(page) {
   await page.getByRole('button',{name:'Save reviewed import',exact:true}).click();
   await expect(page.locator('.import-preview')).toHaveCount(0);
 }
+async function newBatch(page,account='wallet') {
+  await page.locator('.intro-actions [data-action="new"]').click();
+  const dialog=page.locator('.seller-dialog');
+  await dialog.locator('input[name="name"]').fill('Synthetic browser batch '+Date.now());
+  await dialog.locator('input[name="account"]').fill(account);
+  await dialog.getByRole('button',{name:'Create batch',exact:true}).click();
+  await expect(page.locator('#paste-orders')).toBeVisible();
+}
 async function login(page) {
   await page.goto('/');
-  await page.locator('.hero-actions [data-action="new"]').click();
+  await page.locator('.site-header [data-action="workspace"]').click();
   await page.locator('#account-email').fill('browser@example.com');
   await page.locator('#account-password').fill('wrong-password');
   await page.locator('#account-submit').click();
   await expect(page.locator('#account-error')).toBeVisible();
   await page.locator('#account-password').fill('synthetic-browser-test-password');
-  page.once('dialog',dialog=>dialog.accept('Synthetic browser batch '+Date.now()));
   await page.locator('#account-submit').click();
-  await expect(page.locator('[data-upload="orders"]')).toBeVisible();
+  await expect(page.getByRole('heading',{name:"Check today's orders."})).toBeVisible();
+  await newBatch(page);
+}
+async function openCsvStatement(page) {
+  await page.getByText('Uploading a CSV instead?',{exact:true}).click();
 }
 
 test('saved workspace: reviewed imports, receipt, reconciliation, human decisions, export and logout',async({page},testInfo)=>{
@@ -27,8 +38,8 @@ test('saved workspace: reviewed imports, receipt, reconciliation, human decision
   await expect(page.locator('#preview-summary')).toContainText('1 accepted · 0 rejected');
   await expect(page.getByRole('button',{name:'Save reviewed import',exact:true})).toBeDisabled();
   await confirmImport(page);
-  await expect(page.getByText('1 saved orders',{exact:true})).toBeVisible();
-  await page.locator('#statement-account').fill('wallet');
+  await expect(page.locator('.compact-table')).toContainText('BROWSER-1');
+  await openCsvStatement(page);
   await page.locator('[data-coverage="start"]').fill('2026-10-09T08:00');
   await page.locator('[data-coverage="end"]').fill('2026-10-09T20:00');
   await page.locator('[data-coverage="complete"]').check();
@@ -42,8 +53,9 @@ test('saved workspace: reviewed imports, receipt, reconciliation, human decision
   await page.locator('#preview-summary').scrollIntoViewIfNeeded();
   await page.screenshot({path:`../../docs/screenshots/import-${testInfo.project.name}.png`});
   await confirmImport(page);
-  await expect(page.getByText('synthetic-bank.csv · Complete period declared',{exact:true})).toBeVisible();
-  await page.locator('#upload-order').selectOption({label:'BROWSER-1 · Ali Synthetic · PKR 100'});
+  await expect(page.locator('.saved-statement')).toContainText('synthetic-bank.csv');
+  await expect(page.locator('.saved-statement')).toContainText('complete period');
+  await page.locator('#upload-order').selectOption({label:'#BROWSER-1 · Ali Synthetic · Rs 100'});
   await page.locator('[data-upload="claims"]').setInputFiles('../../milaan/backend/samples/SYNTHETIC-receipt.jpg');
   const proof=page.locator('.proof-card');await expect(proof).toHaveCount(1);
   for(const [field,value] of Object.entries({amount:'100',ref:'REF-BROWSER',at:'2026-10-09T14:00',status_text:'Successful',name:'Ali Synthetic'}))await proof.locator(`[data-claim-field="${field}"]`).fill(value);
@@ -87,8 +99,8 @@ test('preview errors, duplicate warning and cancellation never save records',asy
   await page.locator('#preview-confirm').check();
   await expect(page.getByRole('button',{name:'Save reviewed import',exact:true})).toBeDisabled();
   await page.getByRole('button',{name:'Cancel import',exact:true}).click();
-  await expect(page.getByText('0 saved orders',{exact:true})).toBeVisible();
-  await page.locator('#statement-account').fill('wallet');
+  await expect(page.locator('.compact-table')).toHaveCount(0);
+  await openCsvStatement(page);
   await page.locator('[data-coverage="start"]').fill('2026-10-09T08:00');
   await page.locator('[data-coverage="end"]').fill('2026-10-09T20:00');
   const repeated=csv('repeated-reference.csv','posted_at,direction,amount,transaction_id,counterparty\n2026-10-09T14:00,CREDIT,100,REF123,Ali\n2026-10-09T14:01,CREDIT,100,REF123,Ali');
@@ -145,4 +157,30 @@ test('combined payment shares require explicit review and persist without double
   expect(await fs.readFile(await (await downloadEvent).path(),'utf8')).toContain('allocation_parts');
   if(testInfo.project.name==='mobile')expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   const removed=await request.delete(`/api/batches/${batch.id}`,{headers});expect(removed.status()).toBe(204);
+});
+
+test('pasted orders and a statement PDF import after the seller checks the rows',async({page})=>{
+  const failures=[];page.on('pageerror',error=>failures.push(error.message));
+  await login(page);
+  await page.locator('#paste-orders').fill('1042, Hira Khan, 3,500\n1043\tSana Malik\t4200\nnot an order');
+  await expect(page.locator('#paste-preview')).toContainText('2 orders ready to add');
+  await expect(page.locator('#paste-preview')).toContainText('Line 3');
+  await page.getByRole('button',{name:'Add orders',exact:true}).click();
+  await expect(page.getByText(/Line 3/).first()).toBeVisible();
+  await page.locator('#paste-orders').fill('1042, Hira Khan, 3,500\n1043\tSana Malik\t4200');
+  await page.getByRole('button',{name:'Add orders',exact:true}).click();
+  await expect(page.locator('.compact-table tbody tr')).toHaveCount(2);
+  await page.locator('[data-upload="statement"]').setInputFiles('../../milaan/backend/tests/fixtures/statement_bank_table.pdf');
+  const review=page.locator('.statement-review');
+  await expect(review).toBeVisible();
+  await expect(review.locator('tbody tr')).toHaveCount(5);
+  await expect(review.locator('input[data-f="transaction_id"]').first()).toHaveValue('FT2611024471');
+  await review.locator('[data-drop-row="2"]').click();
+  await expect(review.locator('tbody tr')).toHaveCount(4);
+  await review.locator('input[name="refs"]').check();
+  await review.getByRole('button',{name:'Import 4 transactions',exact:true}).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.locator('.saved-statement')).toContainText('4 transactions');
+  await expect(page.locator('[data-action="reconcile"]')).toBeEnabled();
+  expect(failures).toEqual([]);
 });

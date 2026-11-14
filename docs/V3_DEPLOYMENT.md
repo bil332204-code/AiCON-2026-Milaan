@@ -15,7 +15,7 @@ the existing Sites website. Do not change its DNS, identity provider or data unt
 
 ## Local development
 
-Follow README_FIRST.md with Python 3.12 and the tested constraint resolution:
+Follow the local setup in the root README.md with Python 3.12 and the tested constraint resolution:
 
 ```sh
 python3 -m venv .venv

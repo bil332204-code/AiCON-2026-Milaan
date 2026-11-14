@@ -1087,6 +1087,51 @@
         }
       }
     },
+    "/api/statements/read-pdf": {
+      "post": {
+        "tags": [
+          "statements"
+        ],
+        "summary": "Read Pdf Statement",
+        "description": "Read a bank or wallet statement PDF into rows for the seller to check. Nothing is saved.",
+        "operationId": "read_pdf_statement_api_statements_read_pdf_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_read_pdf_statement_api_statements_read_pdf_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/statements/{statement_id}/lines": {
       "get": {
         "tags": [
@@ -2070,6 +2115,20 @@
           "name"
         ],
         "title": "BatchCreate"
+      },
+      "Body_read_pdf_statement_api_statements_read_pdf_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_read_pdf_statement_api_statements_read_pdf_post"
       },
       "Body_upload_claim_api_batches__batch_id__claims_post": {
         "properties": {

@@ -33,7 +33,7 @@ test('public guide supports keyboard language switching and policy navigation', 
 
 test('payment preview is keyboard accessible and motion preference persists', async ({page}) => {
   await page.goto('/');
-  const preview=page.getByRole('button',{name:/Illustrative payment.*explore fictional demo/});
+  const preview=page.locator('.hero-actions [data-action="demo"]');
   await preview.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#workspace')).toBeVisible();

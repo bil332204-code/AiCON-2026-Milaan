@@ -22,4 +22,4 @@ while True:
     break
 set_key(str(path),'DEMO_SELLER_EMAIL',email)
 set_key(str(path),'DEMO_SELLER_PASSWORD',password)
-print('Configured. Run START_DEMO.bat. Keep .env private. New public signups still require email verification.')
+print('Configured. Run START_MILAAN.bat. Keep .env private. New public signups still require email verification.')

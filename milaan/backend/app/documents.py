@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 
 FRONTEND = Path(__file__).resolve().parents[2] / 'frontend/dist'
 PUBLIC_PAGES = {
-    '/': ('index.html', 'Milaan — Every payment, in its place.'),
+    '/': ('index.html', 'Milaan · Know which orders are really paid'),
     '/guide': ('index.html', 'Seller guide · Milaan'),
     '/privacy': ('privacy.html', 'Privacy Policy · Milaan'),
     '/terms': ('terms.html', 'Terms & Conditions · Milaan'),
@@ -19,8 +19,8 @@ def public_document(path, origin, registration_open=True):
     content = (FRONTEND / filename).read_text(encoding='utf-8')
     description = re.search(r'<meta name="description" content="([^"]*)">', content).group(1)
     if path == '/guide':
-        description = ('Learn to compare orders, payment screenshots and statements with '
-                       'Milaan. Seller instructions in English and Roman Urdu.')
+        description = ('How to check customer payment screenshots against your bank or wallet '
+                       'statement with Milaan. Guide in English and Roman Urdu.')
         content = re.sub(r'<meta name="description" content="[^"]*">',
                          lambda _: f'<meta name="description" content="{escape(description, quote=True)}">', content)
     content = re.sub(r'<title>.*?</title>', lambda _: f'<title>{escape(title)}</title>', content)
