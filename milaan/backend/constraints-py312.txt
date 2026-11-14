@@ -34,7 +34,7 @@ psycopg-binary==3.2.13
 psycopg==3.2.13
 pycparser==3.0
 pydantic==2.14.1
-pydantic_core==2.50.1
+pydantic_core==2.50.4
 Pygments==2.21.0
 pypdfium2==5.13.0
 pytest==9.1.1
