@@ -38,8 +38,17 @@ export class MilaanAPI {
   resendCode(challengeId) { return this.request('/api/auth/resend-code', {method:'POST',body:{challenge_id:challengeId}}); }
   async login(email, password, remember=false) {
     const data = await this.request('/api/auth/login', { method: 'POST', body: { email, password, session_mode:this.sessionMode, remember_me:remember } });
-    return this.adopt(data);
+    return data.totp_required ? data : this.adopt(data);
   }
+  async verifyTotpLogin(challengeId, code) {
+    return this.adopt(await this.request('/api/auth/totp/verify-login', {method:'POST', body:{challenge_id:challengeId, code}}));
+  }
+  totpSetup() { return this.request('/api/auth/totp/setup', {method:'POST'}); }
+  totpEnable(code) { return this.request('/api/auth/totp/enable', {method:'POST', body:{code}}); }
+  totpDisable(code) { return this.request('/api/auth/totp/disable', {method:'POST', body:{code}}); }
+  decisionsCSV() { return this.request('/api/decisions.csv', { blob: true }); }
+  exportAccount() { return this.request('/api/account/export', { blob: true }); }
+  async deleteAccount(password) { try { return await this.request('/api/account/delete', {method:'POST', body:{password, confirm:'DELETE'}}); } finally { this.clearSession(); } }
   async logout() { try { return await this.request('/api/auth/logout', { method: 'POST' }); } finally { this.clearSession(); } }
   startAccountEmailVerification() { return this.request('/api/auth/verify-account-email/start',{method:'POST'}); }
   confirmAccountEmail(challenge_id,code) { return this.request('/api/auth/verify-account-email',{method:'POST',body:{challenge_id,code}}); }

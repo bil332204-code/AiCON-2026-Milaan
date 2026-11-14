@@ -81,7 +81,7 @@ def test_public_legal_pages_have_correct_canonical_and_are_indexable(env):
         assert redirect.headers['location']=='https://milaan.app'+path
 
 
-def test_production_security_headers_without_pretending_full_csp_coverage():
+def test_production_security_headers_include_hsts_and_script_csp():
     import asyncio
     from app.middleware import GuardMiddleware
 
@@ -96,7 +96,8 @@ def test_production_security_headers_without_pretending_full_csp_coverage():
         await mw({'type':'http','method':'GET','path':'/','client':('127.0.0.1',1234),'headers':[]},receive,send)
         return dict(result[0]['headers'])
     production=asyncio.run(once(True))
-    assert production[b'strict-transport-security']==b'max-age=31536000'
+    assert production[b'strict-transport-security']==b'max-age=31536000; includeSubDomains'
+    assert b"script-src 'self'" in production[b'content-security-policy']
     assert production[b'x-frame-options']==b'DENY'
     assert production[b'x-content-type-options']==b'nosniff'
     assert production[b'referrer-policy']==b'no-referrer'

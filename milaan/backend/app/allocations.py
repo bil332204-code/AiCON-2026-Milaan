@@ -5,6 +5,7 @@ releases shares by removing rows, so reset/expiry cascades cannot leave counters
 """
 from sqlalchemy import select, func
 from .models import Allocation, User, StatementLine
+from .ledger import ledger_rows
 
 
 def lock_seller(db, owner_id):
@@ -21,7 +22,12 @@ def remaining_credit(db, line, owner_id, excluding=()):
         source = db.get(StatementLine, allocation.statement_line_id)
         if allocation.owner_id != owner_id or not source or source.account_id != line.account_id or source.amount_paisa != line.amount_paisa:
             raise ValueError('Source credit conflicts with retained evidence; correct the statement')
-    return line.amount_paisa - sum(a.amount_paisa for a in allocations)
+    # Credits used by batches that have since expired or been deleted stay used.
+    kept = ledger_rows(db, owner_id, line.credit_key)
+    for row in kept:
+        if row.account_id != line.account_id or row.credit_amount_paisa != line.amount_paisa:
+            raise ValueError('Source credit conflicts with retained evidence; correct the statement')
+    return line.amount_paisa - sum(a.amount_paisa for a in allocations) - sum(r.amount_paisa for r in kept)
 
 
 def add_allocation(db, *, owner_id, batch_id, match_id, order_id, claim_id, line, amount):

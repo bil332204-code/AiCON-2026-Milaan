@@ -57,14 +57,14 @@ def test_cookie_session_is_refreshable_http_only_and_csrf_protected(env):
 def test_remember_me_has_finite_expiry_and_expired_cookie_cannot_open_workspace(env):
     client,db,settings=env;account(client)
     response=cookie_login(client,True)
-    assert 'Max-Age=2592000' in response.headers['set-cookie']
+    assert 'Max-Age=1209600' in response.headers['set-cookie']  # 14 days
     raw=client.cookies.get(settings.cookie_name)
     with db.transaction() as session:session.get(SessionToken,token_digest(raw)).expires_at=now()-timedelta(seconds=1)
     assert client.get('/api/auth/session').status_code==401
     assert client.get('/workspace',follow_redirects=False).status_code==303
 
 
-def test_account_lockout_persists_and_legacy_password_hashes_upgrade_without_new_ids(env):
+def test_failed_logins_throttle_one_network_without_locking_the_owner_out_and_legacy_hashes_upgrade(env):
     client,db,_=env;original=account(client)
     salt=b'1234567890123456'
     legacy='scrypt$'+salt.hex()+'$'+hashlib.scrypt(PASSWORD.encode(),salt=salt,n=16384,r=8,p=1,dklen=32).hex()
@@ -73,9 +73,12 @@ def test_account_lockout_persists_and_legacy_password_hashes_upgrade_without_new
     with db.sessions() as session:
         user=session.get(User,original['user']['id']);assert user.password_hash.startswith('scrypt-v2$')
     for _ in range(5):assert client.post('/api/auth/login',json={'email':EMAIL,'password':'wrong'}).status_code==401
-    assert client.post('/api/auth/login',json={'email':EMAIL,'password':PASSWORD}).status_code==401
-    with db.transaction() as session:session.get(User,original['user']['id']).login_locked_until=now()-timedelta(seconds=1)
-    assert cookie_login(client).status_code==200
+    # The attacking network is throttled, even with the right password...
+    assert client.post('/api/auth/login',json={'email':EMAIL,'password':PASSWORD}).status_code==429
+    # ...but the owner on another network can still sign in: no account-wide lockout.
+    from fastapi.testclient import TestClient
+    with TestClient(client.app, client=('10.9.8.7', 50000)) as other:
+        assert other.post('/api/auth/login',json={'email':EMAIL,'password':PASSWORD}).status_code==200
 
 
 def test_reset_is_hashed_single_use_and_revokes_all_sessions(env,monkeypatch):
@@ -142,8 +145,26 @@ def test_real_auth_rate_limit_rejects_sixteenth_request(tmp_path):
     settings=Settings(database_url=f'sqlite:///{tmp_path}/rate.db',migration_database_url='',storage_backend='local',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='')
     app=create_app(settings);Base.metadata.create_all(app.state.database.engine)
     with TestClient(app) as client:
-        statuses=[client.post('/api/auth/login',json={'email':'missing@example.com','password':'synthetic'}).status_code for _ in range(16)]
+        statuses=[client.post('/api/auth/login',json={'email':f'missing{i}@example.com','password':'synthetic'}).status_code for i in range(16)]
     assert statuses[:15]==[401]*15 and statuses[15]==429
+
+
+def test_rate_limit_uses_the_real_client_ip_behind_the_hosting_proxy(tmp_path):
+    """On Render every socket peer is 127.0.0.1; one visitor's attempts must not block others."""
+    from fastapi.testclient import TestClient
+    from app.main import create_app
+    from app.models import Base
+    settings=Settings(database_url=f'sqlite:///{tmp_path}/proxy.db',migration_database_url='',storage_backend='local',storage_dir=tmp_path/'images',run_worker=False,testing=False,demo_seller_email='',demo_seller_password='',trust_proxy_headers=True)
+    app=create_app(settings);Base.metadata.create_all(app.state.database.engine)
+    with TestClient(app, client=('127.0.0.1', 40000)) as client:
+        attacker=[client.post('/api/auth/login',headers={'CF-Connecting-IP':'203.0.113.9'},json={'email':f'x{i}@example.com','password':'x'}).status_code for i in range(16)]
+        assert attacker[-1]==429
+        honest=client.post('/api/auth/login',headers={'CF-Connecting-IP':'198.51.100.20'},json={'email':'someone@example.com','password':'x'})
+        assert honest.status_code==401
+        # A client cannot pick its own address when the peer is not a trusted proxy.
+    with TestClient(app, client=('203.0.113.50', 40000)) as direct:
+        spoof=[direct.post('/api/auth/login',headers={'CF-Connecting-IP':f'192.0.2.{i}'},json={'email':f'y{i}@example.com','password':'x'}).status_code for i in range(16)]
+        assert spoof[-1]==429
 
 
 def test_results_remain_safe_during_concurrent_batch_deletion(env,auth):

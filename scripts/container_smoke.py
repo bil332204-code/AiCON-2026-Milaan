@@ -27,8 +27,8 @@ p=json.load(sys.stdin)
 assert os.getuid()!=0
 with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as c:
     assert c.get('/workspace',follow_redirects=False).status_code==303
-    assert 'cinematic.css' in c.get('/').text
-    assert c.get('/cinematic.css').status_code==200
+    assert 'formal.css' in c.get('/').text
+    assert c.get('/formal.css').status_code==200
     r=c.post('/api/auth/register',json={'email':'container@example.com','password':p['password'],'display_name':'Synthetic container user'});assert r.status_code==201
     r=c.post('/api/auth/login',json={'email':'container@example.com','password':p['password'],'session_mode':'cookie','remember_me':True});assert r.status_code==200
     assert 'access_token' not in r.json() and 'HttpOnly' in r.headers['set-cookie']
@@ -62,7 +62,7 @@ try:
     state=json.loads(first.stdout)
     docker('restart',name);wait_ready()
     docker('exec','-i',name,'python','-c',RESTORE,input=json.dumps(state))
-    print('Container checks passed: non-root app, cinematic assets, CSRF, persistent data/session after restart, logout revocation, forwarded-IP spoof rejection.')
+    print('Container checks passed: non-root app, landing assets, CSRF, persistent data/session after restart, logout revocation, forwarded-IP spoof rejection.')
 finally:
     docker('rm','--force',name,check=False)
     docker('volume','rm',volume,check=False)

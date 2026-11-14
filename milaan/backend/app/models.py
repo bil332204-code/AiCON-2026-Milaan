@@ -19,6 +19,10 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(100))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    # Optional authenticator-app (TOTP) second step. Secret is base32; never returned once enabled.
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 class SessionToken(Base):
     __tablename__ = "session_tokens"
@@ -195,63 +199,6 @@ class PendingSignup(Base):
     send_count: Mapped[int] = mapped_column(Integer, default=1)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
 
-class Product(Base):
-    __tablename__ = "products"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    name: Mapped[str] = mapped_column(String(200))
-    description: Mapped[str] = mapped_column(Text, default="")
-    sku: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    category: Mapped[str] = mapped_column(String(100), default="General", index=True)
-    purchase_price_paisa: Mapped[int] = mapped_column(BigInteger)
-    selling_price_paisa: Mapped[int] = mapped_column(BigInteger)
-    stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
-    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=5)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
-class CartItem(Base):
-    __tablename__ = "cart_items"
-    __table_args__ = (UniqueConstraint("user_id", "product_id"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
-    quantity: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
-class MarketplaceOrder(Base):
-    __tablename__ = "marketplace_orders"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    order_number: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    seller_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    customer_name: Mapped[str] = mapped_column(String(150))
-    customer_email: Mapped[str] = mapped_column(String(254))
-    customer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    shipping_address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    subtotal_paisa: Mapped[int] = mapped_column(BigInteger)
-    shipping_fee_paisa: Mapped[int] = mapped_column(BigInteger, default=0)
-    total_paisa: Mapped[int] = mapped_column(BigInteger)
-    status: Mapped[str] = mapped_column(String(30), default="Pending", index=True)
-    payment_mode: Mapped[str] = mapped_column(String(30), default="test_checkout")
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
-
-class MarketplaceOrderItem(Base):
-    __tablename__ = "marketplace_order_items"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    order_id: Mapped[str] = mapped_column(ForeignKey("marketplace_orders.id", ondelete="CASCADE"), index=True)
-    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
-    product_name: Mapped[str] = mapped_column(String(200))
-    product_sku: Mapped[str] = mapped_column(String(100))
-    unit_price_paisa: Mapped[int] = mapped_column(BigInteger)
-    quantity: Mapped[int] = mapped_column(Integer)
-    total_price_paisa: Mapped[int] = mapped_column(BigInteger)
-
-
-
 class PasswordReset(Base):
     __tablename__ = "password_resets"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
@@ -271,3 +218,37 @@ class ReceiptDeletion(Base):
     storage_identity: Mapped[str] = mapped_column(String(64))
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+
+
+class CreditLedger(Base):
+    """Bank credits already used to fund orders. Outlives the 7-day batches (copied in when a
+    batch is deleted or expires) so the same credit cannot fund a new order later."""
+    __tablename__ = "credit_ledger"
+    __table_args__ = (CheckConstraint("amount_paisa > 0", name="ck_credit_ledger_positive"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    credit_key: Mapped[str] = mapped_column(String(64), index=True)
+    account_id: Mapped[str] = mapped_column(String(100))
+    credit_amount_paisa: Mapped[int] = mapped_column(BigInteger)
+    amount_paisa: Mapped[int] = mapped_column(BigInteger)
+    order_ref: Mapped[str] = mapped_column(String(100))
+    transaction_id: Mapped[str] = mapped_column(String(150), default="")
+    batch_name: Mapped[str] = mapped_column(String(150), default="")
+    used_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    retain_until: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class DecisionLog(Base):
+    """Minimal long-lived record of SHIP/HOLD/REVIEW decisions (no images, no customer names)."""
+    __tablename__ = "decision_log"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    batch_name: Mapped[str] = mapped_column(String(150), default="")
+    order_ref: Mapped[str] = mapped_column(String(100))
+    amount_paisa: Mapped[int] = mapped_column(BigInteger)
+    decision: Mapped[str] = mapped_column(String(10))
+    source: Mapped[str] = mapped_column(String(20))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    transaction_id: Mapped[str] = mapped_column(String(150), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    retain_until: Mapped[datetime] = mapped_column(DateTime, index=True)

@@ -59,7 +59,7 @@ def test_privacy_discloses_source_documented_retention_and_processors(env):
     text=response.text
     for required in ['168 hours (seven days)','private receipt files','original EXIF metadata',
                      'Google\'s Gemini','external OCR engine','Resend HTTPS API',
-                     'account verification and password recovery emails only',
+                     'account emails only','13 months','Download all my data','Delete my account',
                      'not configured yet','backups']:
         assert required in text, required
     assert 'guaranteed instant deletion' not in text.lower()
@@ -107,7 +107,9 @@ def test_public_document_head_requests_keep_security_and_canonical_headers(env, 
     assert response.status_code == 200 and response.content == b''
     assert response.headers['link'] == f'<{settings.public_origin}{route}>; rel="canonical"'
     assert response.headers['x-content-type-options'] == 'nosniff'
-    assert 'no-store' in response.headers['cache-control']
+    # Public pages revalidate; account pages are never stored.
+    assert response.headers['cache-control'] == ('no-store' if route in {'/login', '/signup', '/reset-password'} else 'no-cache')
+    assert "script-src 'self'" in response.headers['content-security-policy']
     assert client.head(settings.public_origin + '/workspace', follow_redirects=False).status_code == 303
 
 def test_registration_gate_is_publicly_honest_without_opening_signup(env):

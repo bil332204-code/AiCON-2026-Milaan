@@ -7,12 +7,25 @@ PDF text is untrusted data: it is only pattern-matched, never executed or follow
 from __future__ import annotations
 
 import io
+import json
+import os
 import re
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 MAX_PDF_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 60
 MAX_ROWS = 2000
+# A crafted PDF can expand a few hundred KB into gigabytes. Parsing therefore runs in a
+# short-lived child process with its own memory/CPU ceiling and bounded decompression.
+SANDBOX_MEMORY_BYTES = 320 * 1024 * 1024
+SANDBOX_CPU_SECONDS = 15
+SANDBOX_WALL_SECONDS = 30
+MAX_STREAM_BYTES = 32 * 1024 * 1024
+MAX_DECODED_BYTES = 96 * 1024 * 1024
+TOO_COMPLEX = "This PDF is too large or complex to read safely. Download a shorter date range, or upload a CSV instead."
 
 MONTHS = {m: i for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
@@ -278,16 +291,49 @@ def _period(text: str):
     return None
 
 
+class DecodeLimitExceeded(Exception):
+    """A compressed stream expanded past the safe limit (decompression bomb)."""
+
+
 def _account_hint(text: str) -> str:
     m = re.search(r"(?:account|a/c|iban|wallet|mobile)\s*(?:no\.?|number|#)?\s*:?\s*(?P<acc>[A-Z]{2}\d{2}[A-Z0-9 ]{10,30}|[\d][\d\- ]{6,24}\d)", text[:3000], re.I)
     return re.sub(r"\s+", " ", m["acc"]).strip() if m else ""
 
 
-def read_statement_pdf(raw: bytes) -> dict:
+def _check_upload(raw: bytes) -> None:
     if not raw.startswith(b"%PDF"):
         raise StatementPDFError("This file is not a PDF. Upload the statement PDF from your bank or wallet app.")
     if len(raw) > MAX_PDF_BYTES:
         raise StatementPDFError("This PDF is larger than 10 MB. Download a shorter date range and try again.")
+
+
+def read_statement_pdf(raw: bytes) -> dict:
+    """Parse in an isolated child process: no secrets in its environment, hard limits on
+    memory, CPU and wall time. Any limit breach becomes a plain seller-facing error."""
+    _check_upload(raw)
+    backend = str(Path(__file__).resolve().parents[1])
+    env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": backend, "PYTHONDONTWRITEBYTECODE": "1",
+           "PYTHONHASHSEED": "0", "LANG": "C.UTF-8"}
+    if os.name == "nt":  # Windows needs these to start Python at all
+        env.update({k: os.environ[k] for k in ("SYSTEMROOT", "TEMP", "TMP") if k in os.environ})
+    try:
+        done = subprocess.run([sys.executable, "-m", "app.pdf_sandbox"], input=raw, capture_output=True,
+                              timeout=SANDBOX_WALL_SECONDS, cwd=backend, env=env, check=False)
+    except subprocess.TimeoutExpired:
+        raise StatementPDFError(TOO_COMPLEX) from None
+    try:
+        message = json.loads(done.stdout.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise StatementPDFError(TOO_COMPLEX) from None
+    if message.get("ok") is True and isinstance(message.get("result"), dict):
+        return message["result"]
+    error = message.get("error")
+    raise StatementPDFError(error if isinstance(error, str) and error else TOO_COMPLEX)
+
+
+def read_statement_pdf_in_process(raw: bytes) -> dict:
+    """The parser itself. Call only inside the sandbox (app.pdf_sandbox)."""
+    _check_upload(raw)
     try:
         import pdfplumber
         from pdfminer.pdfdocument import PDFPasswordIncorrect
@@ -323,13 +369,18 @@ def read_statement_pdf(raw: bytes) -> dict:
                                 prev["transaction_id"] = _find_ref(extra, [])
                                 if prev["transaction_id"] and "transaction_id" in prev["needs_check"]:
                                     prev["needs_check"].remove("transaction_id")
-    except StatementPDFError:
+    except (StatementPDFError, MemoryError, DecodeLimitExceeded):
         raise
     except PDFPasswordIncorrect:
         raise StatementPDFError("This PDF is password-protected. Open it, save a copy without the password, and upload that.") from None
     except Exception as exc:
         if "password" in str(exc).lower() or "encrypt" in str(exc).lower():
             raise StatementPDFError("This PDF is password-protected. Open it, save a copy without the password, and upload that.") from None
+        cause, seen = exc, 0
+        while cause is not None and seen < 10:
+            if isinstance(cause, (MemoryError, DecodeLimitExceeded, RecursionError)):
+                raise StatementPDFError(TOO_COMPLEX) from None
+            cause, seen = cause.__cause__ or cause.__context__, seen + 1
         raise StatementPDFError("This PDF could not be read. Try downloading it again from your bank or wallet app.") from None
 
     full_text = "\n".join(texts)

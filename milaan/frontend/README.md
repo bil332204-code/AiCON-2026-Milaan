@@ -11,8 +11,8 @@ Plain HTML, CSS and ES modules in `dist/`, served by the FastAPI backend (no bui
 | `milaan-api.js` | API client |
 | `engine.js` | Matching rules used by the in-browser sample shop |
 | `import-preview.js` | Column mapping preview for CSV uploads |
-| `cinematic.js`, `scene.js` | Landing page animation |
-| `styles.css`, `cinematic.css`, `phase1.css`, `seller.css` | Styles |
+| `landing.js` | Landing page motion (3D hero, reveals); respects reduced motion |
+| `styles.css`, `phase1.css`, `seller.css`, `formal.css` (light theme, loaded last) | Styles |
 | `about.html`, `privacy.html`, `terms.html` | Public pages |
 
 Tests: `npm test` (Node's built-in test runner) and `npm run check` (syntax check).

@@ -27,20 +27,31 @@
 .csv-help summary{cursor:pointer;font-weight:600}
 .csv-help[open]{display:grid;gap:10px}
 @media (max-width:720px){.statement-rows table,.statement-rows thead,.statement-rows tbody,.statement-rows tr,.statement-rows td{display:block}.statement-rows thead{display:none}.statement-rows tr{padding:10px 0;border-top:1px solid rgba(127,127,127,.2)}.statement-rows td{border:0}}
-/* dark dialogs to match the workspace */
-.seller-dialog,.statement-review{padding:32px;background:linear-gradient(145deg,#1b2238f5,#0f1b2cf7);color:#e5edfc;border:1px solid #b7caff30;border-radius:20px;max-height:92dvh;overflow:auto}
-.seller-dialog::backdrop,.statement-review::backdrop{background:#070b18d9}
-.seller-form h2{color:#f4f7ff;letter-spacing:-.8px}
-.seller-form .account-intro,.seller-form .field,.seller-form .checkbox-row,.field-help{color:#b5c6df}
-.seller-form .account-intro b{color:#f4f7ff}
-.statement-rows{border:1px solid #b7caff1c}
-.statement-rows th{background:#141e31;color:#9fb0cc}
-.statement-rows input,.statement-rows select{background:#0d182a;color:#edf2ff;border-color:#a9c3ed40}
-.statement-rows select option{background:#0d182a}
-.statement-rows .needs-check{border-color:#e0a526;background:#3a2e10}
-.notice{color:#f4e2b0}
-#workspace .compact-table td{color:#e5edfc}
-#workspace .compact-table th{color:#9fb0cc}
+/* dialogs in the light workspace palette */
+.seller-dialog,.statement-review{padding:32px;background:#fff;color:#0e1b2e;border:1px solid #dce2ea;border-radius:16px;max-height:92dvh;overflow:auto;box-shadow:0 40px 80px -30px #0e1b2e59}
+.seller-dialog::backdrop,.statement-review::backdrop{background:#0e1b2e66}
+.seller-form h2{color:#0e1b2e;font-family:'Source Serif 4',Georgia,serif;font-weight:600;letter-spacing:-.01em}
+.seller-form .account-intro,.seller-form .field,.seller-form .checkbox-row,.field-help{color:#4e5b6e}
+.field-help{opacity:1}
+.seller-form .account-intro b{color:#0e1b2e}
+.statement-rows{border:1px solid #dce2ea}
+.statement-rows th{background:#f4f6f9;color:#4e5b6e}
+.statement-rows input,.statement-rows select{background:#fff;color:#0e1b2e;border-color:#c6cfdb}
+.statement-rows .needs-check{border-color:#b7791f;background:#fbf0de}
+.notice{color:#6b3f05;background:#fbf0de;border-color:#e8c58a}
+.seller-step.is-done h2 .step-label{background:#0b6e4f}
+
 /* landing header on very small phones */
 .header-signin{white-space:nowrap}
 @media (max-width:400px){.site-header .header-actions{gap:8px}.site-header .btn-small{padding-left:12px;padding-right:12px}.site-header .btn-small .icon{display:none}.header-signin{font-size:14px}}
+
+/* Sidebar counter */
+#nav-count{border-radius:4px;padding:2px 6px;font-size:10px}
+
+/* Settings: security and your data */
+.settings-security h3{font-size:14px;margin:22px 0 6px;color:#0e1b2e}
+.settings-security p{max-width:72ch}
+.settings-security .setup-key code{font-size:15px;letter-spacing:.06em;padding:6px 10px;border-radius:8px;background:#eef2f7;color:#0e1b2e;user-select:all}
+.settings-security .button-row{display:flex;flex-wrap:wrap;gap:10px}
+.btn.btn-danger{background:#a4262c;color:#fff;border:1px solid #a4262c}
+.btn.btn-danger:hover{background:#8a1f24}
