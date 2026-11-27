@@ -65,7 +65,7 @@ def test_privacy_discloses_source_documented_retention_and_processors(env):
     assert 'guaranteed instant deletion' not in text.lower()
 
 
-@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot'])
+@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot', '/transaction-id'])
 def test_public_metadata_uses_configured_origin_not_request_or_query(env, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -86,7 +86,8 @@ def test_public_metadata_uses_configured_origin_not_request_or_query(env, route)
 
 @pytest.mark.parametrize('alias,route', [('/index.html','/'), ('/privacy.html','/privacy'),
                                         ('/terms.html','/terms'), ('/about.html','/about'),
-                                        ('/fake-payment-screenshot.html','/fake-payment-screenshot')])
+                                        ('/fake-payment-screenshot.html','/fake-payment-screenshot'),
+                                        ('/transaction-id.html','/transaction-id')])
 def test_static_document_aliases_cannot_bypass_canonical_host(env, alias, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -99,7 +100,7 @@ def test_static_document_aliases_cannot_bypass_canonical_host(env, alias, route)
     assert local.status_code == 307 and local.headers['location'] == route + query
 
 
-@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot', '/login'])
+@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot', '/transaction-id', '/login'])
 def test_public_document_head_requests_keep_security_and_canonical_headers(env, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -141,7 +142,7 @@ def test_legal_roman_urdu_summary_is_clearly_non_authoritative(env):
 
 def test_social_metadata_sitemap_and_helpful_missing_route(env):
     client,_,settings=env
-    for route in ["/","/guide","/privacy","/terms","/about","/fake-payment-screenshot"]:
+    for route in ["/","/guide","/privacy","/terms","/about","/fake-payment-screenshot","/transaction-id"]:
         page=client.get(route)
         assert page.status_code==200
         assert 'property="og:image"' in page.text
@@ -226,3 +227,20 @@ def test_home_has_valid_structured_data_only_on_home(env):
     assert all(item['url'] == 'https://milaan.app/' for item in graph)
     for route in ['/guide', '/about', '/fake-payment-screenshot']:
         assert 'application/ld+json' not in client.get('https://milaan.app' + route).text
+
+
+def test_transaction_id_guide_is_public_indexable_and_linked(env):
+    client, _, settings = env
+    settings.app_env = 'production'
+    settings.public_origin = 'https://milaan.app'
+    response = client.get('https://milaan.app/transaction-id')
+    assert response.status_code == 200
+    assert 'x-robots-tag' not in response.headers
+    assert response.headers['link'] == '<https://milaan.app/transaction-id>; rel="canonical"'
+    text = response.text
+    assert '<title>What Is a Transaction ID in Easypaisa &amp; JazzCash? · Milaan</title>' in text
+    assert text.count('<h1>') == 1 and 'lang="ur-Latn"' in text and 'sirf khulasa' in text
+    assert 'href="/fake-payment-screenshot"' in text and '<script' not in text
+    for route in ['/', '/privacy', '/terms', '/about', '/fake-payment-screenshot']:
+        assert 'href="/transaction-id"' in client.get('https://milaan.app' + route).text
+    assert 'https://milaan.app/transaction-id' in client.get('/sitemap.xml').text
