@@ -1,0 +1,29 @@
+name: Keep milaan.app awake
+# Render's free plan sleeps after ~15 idle minutes. Google treats a timed-out
+# robots.txt as "block everything", so ping the site every 10 minutes.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-awake
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Ping robots.txt and home page
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://milaan.app/robots.txt https://milaan.app/; do
+            code="$(curl --retry 3 --retry-delay 10 --retry-connrefused --max-time 90 -sS -o /dev/null -w '%{http_code}' "$url")"
+            echo "$url -> $code"
+            [[ "$code" == "200" ]]
+          done
