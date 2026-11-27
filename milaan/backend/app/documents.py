@@ -14,6 +14,7 @@ PUBLIC_PAGES = {
     '/about': ('about.html', 'About & Contact · Milaan'),
     '/fake-payment-screenshot': ('fake-payment-screenshot.html',
                                  'How to Spot a Fake Easypaisa or JazzCash Screenshot · Milaan'),
+    '/transaction-id': ('transaction-id.html', 'What Is a Transaction ID in Easypaisa & JazzCash? · Milaan'),
 }
 
 

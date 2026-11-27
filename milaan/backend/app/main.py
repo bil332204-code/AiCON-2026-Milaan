@@ -922,6 +922,7 @@ def create_app(settings=None):
     @app.api_route('/terms', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/about', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/fake-payment-screenshot', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/transaction-id', methods=['GET', 'HEAD'], include_in_schema=False)
     def public_page(request: Request):
         # Only this fixed allowlist can map to a public document, never arbitrary file paths.
         return public_document(request.url.path, settings.public_origin, settings.registration_open)
@@ -931,10 +932,12 @@ def create_app(settings=None):
     @app.api_route('/terms.html', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/about.html', methods=['GET', 'HEAD'], include_in_schema=False)
     @app.api_route('/fake-payment-screenshot.html', methods=['GET', 'HEAD'], include_in_schema=False)
+    @app.api_route('/transaction-id.html', methods=['GET', 'HEAD'], include_in_schema=False)
     def document_alias(request: Request):
         paths = {'/index.html': '/', '/privacy.html': '/privacy',
                  '/terms.html': '/terms', '/about.html': '/about',
-                 '/fake-payment-screenshot.html': '/fake-payment-screenshot'}
+                 '/fake-payment-screenshot.html': '/fake-payment-screenshot',
+                 '/transaction-id.html': '/transaction-id'}
         target = paths[request.url.path]
         if request.url.query:
             target += '?' + request.url.query

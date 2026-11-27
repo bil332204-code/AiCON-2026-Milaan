@@ -85,10 +85,12 @@ class CanonicalOriginMiddleware:
     and origin checks; never redirect credentials or request bodies across origins.
     Render health probes remain available independently of their internal Host.
     """
-    public = {'/', '/index.html', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot'}
+    public = {'/', '/index.html', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot',
+              '/transaction-id'}
     pages = public | {'/login', '/signup', '/workspace', '/reset-password'}
     aliases = {'/index.html': '/', '/privacy.html': '/privacy', '/terms.html': '/terms', '/about.html': '/about',
-               '/fake-payment-screenshot.html': '/fake-payment-screenshot'}
+               '/fake-payment-screenshot.html': '/fake-payment-screenshot',
+               '/transaction-id.html': '/transaction-id'}
 
     def __init__(self, app, settings):
         self.app, self.settings = app, settings
