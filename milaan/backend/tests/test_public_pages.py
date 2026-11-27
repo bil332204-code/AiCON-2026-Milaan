@@ -65,7 +65,7 @@ def test_privacy_discloses_source_documented_retention_and_processors(env):
     assert 'guaranteed instant deletion' not in text.lower()
 
 
-@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about'])
+@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot'])
 def test_public_metadata_uses_configured_origin_not_request_or_query(env, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -85,7 +85,8 @@ def test_public_metadata_uses_configured_origin_not_request_or_query(env, route)
 
 
 @pytest.mark.parametrize('alias,route', [('/index.html','/'), ('/privacy.html','/privacy'),
-                                        ('/terms.html','/terms'), ('/about.html','/about')])
+                                        ('/terms.html','/terms'), ('/about.html','/about'),
+                                        ('/fake-payment-screenshot.html','/fake-payment-screenshot')])
 def test_static_document_aliases_cannot_bypass_canonical_host(env, alias, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -98,7 +99,7 @@ def test_static_document_aliases_cannot_bypass_canonical_host(env, alias, route)
     assert local.status_code == 307 and local.headers['location'] == route + query
 
 
-@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/login'])
+@pytest.mark.parametrize('route', ['/', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot', '/login'])
 def test_public_document_head_requests_keep_security_and_canonical_headers(env, route):
     client, _, settings = env
     settings.app_env = 'production'
@@ -140,10 +141,11 @@ def test_legal_roman_urdu_summary_is_clearly_non_authoritative(env):
 
 def test_social_metadata_sitemap_and_helpful_missing_route(env):
     client,_,settings=env
-    for route in ["/","/guide","/privacy","/terms","/about"]:
+    for route in ["/","/guide","/privacy","/terms","/about","/fake-payment-screenshot"]:
         page=client.get(route)
         assert page.status_code==200
         assert 'property="og:image"' in page.text
+        assert '<meta property="og:site_name" content="Milaan">' in page.text
         assert 'name="twitter:card" content="summary_large_image"' in page.text
         assert f'{settings.public_origin}/share-card.png' in page.text
     for target, text in [("/share-card.png",None),("/robots.txt","Sitemap:"),("/sitemap.xml","<urlset")]:
@@ -189,3 +191,38 @@ def test_existing_account_workspace_keeps_closed_registration_label(env):
     workspace = client.get("/workspace")
     assert workspace.status_code == 200
     assert '<meta name="milaan-registration-state" content="closed">' in workspace.text
+
+
+def test_fake_screenshot_guide_is_public_indexable_and_linked(env):
+    client, _, settings = env
+    settings.app_env = 'production'
+    settings.public_origin = 'https://milaan.app'
+    response = client.get('https://milaan.app/fake-payment-screenshot')
+    assert response.status_code == 200
+    assert 'x-robots-tag' not in response.headers
+    assert response.headers['link'] == '<https://milaan.app/fake-payment-screenshot>; rel="canonical"'
+    text = response.text
+    assert '<title>How to Spot a Fake Easypaisa or JazzCash Screenshot · Milaan</title>' in text
+    assert text.count('<h1>') == 1 and 'Easypaisa' in text and 'JazzCash' in text
+    assert 'lang="ur-Latn"' in text and 'sirf khulasa' in text
+    assert '<script' not in text
+    for route in ['/', '/privacy', '/terms', '/about']:
+        assert 'href="/fake-payment-screenshot"' in client.get('https://milaan.app' + route).text
+    assert 'https://milaan.app/fake-payment-screenshot' in client.get('/sitemap.xml').text
+    assert 'Disallow: /samples/' in client.get('/robots.txt').text
+
+
+def test_home_has_valid_structured_data_only_on_home(env):
+    import json, re
+    client, _, settings = env
+    settings.app_env = 'production'
+    settings.public_origin = 'https://milaan.app'
+    home = client.get('https://milaan.app/').text
+    assert '<title>Milaan · Check Easypaisa, JazzCash &amp; Bank Payment Screenshots</title>' in home
+    blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', home, flags=re.S)
+    assert len(blocks) == 1
+    graph = json.loads(blocks[0])['@graph']
+    assert {item['@type'] for item in graph} == {'Organization', 'WebSite', 'SoftwareApplication'}
+    assert all(item['url'] == 'https://milaan.app/' for item in graph)
+    for route in ['/guide', '/about', '/fake-payment-screenshot']:
+        assert 'application/ld+json' not in client.get('https://milaan.app' + route).text

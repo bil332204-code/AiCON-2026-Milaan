@@ -85,8 +85,10 @@ class CanonicalOriginMiddleware:
     and origin checks; never redirect credentials or request bodies across origins.
     Render health probes remain available independently of their internal Host.
     """
-    pages = {'/', '/index.html', '/login', '/signup', '/workspace', '/reset-password', '/guide', '/privacy', '/terms', '/about'}
-    aliases = {'/index.html': '/', '/privacy.html': '/privacy', '/terms.html': '/terms', '/about.html': '/about'}
+    public = {'/', '/index.html', '/guide', '/privacy', '/terms', '/about', '/fake-payment-screenshot'}
+    pages = public | {'/login', '/signup', '/workspace', '/reset-password'}
+    aliases = {'/index.html': '/', '/privacy.html': '/privacy', '/terms.html': '/terms', '/about.html': '/about',
+               '/fake-payment-screenshot.html': '/fake-payment-screenshot'}
 
     def __init__(self, app, settings):
         self.app, self.settings = app, settings
@@ -111,7 +113,7 @@ class CanonicalOriginMiddleware:
                 headers = message.setdefault('headers', [])
                 target = origin + ('/' if path == '/index.html' else path)
                 headers.append((b'link', ('<'+target+'>; rel="canonical"').encode('ascii')))
-                if path not in {'/', '/index.html', '/guide', '/privacy', '/terms', '/about'}:
+                if path not in self.public:
                     headers.append((b'x-robots-tag',b'noindex, nofollow'))
             await send(message)
         await self.app(scope,receive,canonical_send)
